@@ -4,7 +4,7 @@ set Additional shared libraries            = ./libmelt_global_mod.so
 set Output directory                       = output-melt-1d-loop-1melttransport
 set Use years in output instead of seconds = true
 
-#set Resume computation = true
+set Resume computation = true
 
 set Dimension                              = 2
 set Adiabatic surface temperature          = 870
@@ -15,10 +15,10 @@ set CFL number                             = 1.0
 # The tolerance and maximum number of iterations can be tuned.
 set Nonlinear solver scheme                = iterated Advection and Stokes
 #set Nonlinear solver scheme                = Stokes only # iterated Advection and Stokes
-set Nonlinear solver tolerance             = 1e-5
+set Nonlinear solver tolerance             = 1e-4
 set Max nonlinear iterations               = 10
 
-set End time                               = 20e6
+set End time                               = 1.5e7
 set Maximum first time step                = 1e3
 set Maximum time step                      = 1e5 #1e4
 set Maximum relative increase in time step = 10

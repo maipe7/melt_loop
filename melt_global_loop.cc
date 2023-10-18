@@ -210,42 +210,30 @@ namespace aspect
       double eG=205e-9;
       double f=0.13;
 
-
-      double Tmax=c+d+eG*pressure;
+      double Tmax=c+d+eG*pressure; // dry solidus==dry liquidus - curves cross there
       //double Tmax= c+d+e*1e-9*pressure;
-
-      //double Tlim=600.0+ 100.*std::pow((1e-9*pressure-1.),2) + 273.; // quadratic
-      double Tlim;
-      if (pressure > 1e9) Tlim=600.0+ 75.*(1e-9*pressure-1.) + 273.; // linear
-      else Tlim=600.0+273.;
-      double DTknee=2.0;
-      double CWmax=30.;
-
-      double Tasymp=Tlim-DTknee;
-      double as=CWmax/(Tmax-Tlim)*(Tmax-Tasymp)*DTknee;
-      double bs=as/(Tmax-Tasymp);
+      double Delta=2.;
+      double Tmin=(pressure<1e9 ? 640. + 273. + 100.*std::pow(pressure*1e-9-1.,2.)/1. : 640.+273.);
+ 
       double csolidus;
       double cliquidus;
-      if (temperature>Tasymp) csolidus=as/(temperature-Tasymp)-bs;
-      else csolidus=CWmax;
-      cliquidus=std::min((aG*pressure+b)*(1-std::pow((temperature-c)/(d+eG*pressure),f)),CWmax);
+
+      cliquidus=(aG*pressure+b)*(1-std::pow((std::max(Tmin,temperature)-c)/(d+eG*pressure),f));
       //cliquidus=std::min((1e-9*a*pressure+b)*(1-std::pow((temperature-c)/(d+1e-9*e*pressure),f)),CWmax);
-      
       //w(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
-      if ( temperature >= Tmax) // above liquidus
+
+      csolidus=(temperature>Tmin ? Delta*cliquidus/(Tmax-Tmin)*
+           ( (Tmax-(Tmin-Delta))/(temperature-(Tmin-Delta)) - 1. )  : cliquidus );
+
+      if ( temperature >= Tmax) // above liquidus for all c
       {
         c_s=0.0;
         c_f=0.0;
       }
-      else if (csolidus < cliquidus)
+      else 
       {
         c_s=csolidus;
         c_f=cliquidus;
-      }
-      else
-      { 
-        c_s=CWmax;
-        c_f=CWmax; // TODO cbulk
       }
     }
 
@@ -361,7 +349,8 @@ namespace aspect
         //if (this->include_melt_transport())
         {
           if (include_melting_and_freezing && in.requests_property(MaterialProperties::reaction_terms))
-          {
+          { //TODO this choice make an important difference!:
+            //double c_tot_old = old_peridotite[i] * (1.0 - porosity) + old_peridotiteF[i] * porosity;
             double c_tot_old = old_peridotite[i] * (1.0 - old_porosity[i]) + old_peridotiteF[i] * old_porosity[i];
             // Calculate solid and fluid compositions:
             // (possible modification with depth = this->get_geometry_model().depth(point);)
@@ -384,17 +373,20 @@ namespace aspect
               {
                 if (reaction_rate_out != nullptr)
                 {
-                  //if (in.position[i][1]<10e3) cout << c_tot_old << " " << c_s << " " << c_f << " " << lithostatic_pressure << " " << in.temperature[i] ;
-
+                 /* if (old_peridotite[i]<0 || old_peridotiteF[i]<0 ) cout << "!!!!!!!!";
+                  if (c == peridotite_idx && in.position[i][1]>11e3 && in.position[i][1]<12e3)
+                    cout  << old_porosity[i] << " "<< old_peridotite[i] << " " << old_peridotiteF[i] << " " <<
+                    c_tot_old << " " << c_s << " " << c_f << " " << in.position[i][1] << " " << in.temperature[i] << "\n" ;
+*/
                   if (c_tot_old < c_s) //... below solidus - equilibrium porosity is 0
                   {
                     //if (in.position[i][1]<10e3) cout << "below S" <<"\n";
                     if (c == peridotite_idx)
                       reaction_rate_out->reaction_rates[i][c] =
-                          old_porosity[i] * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
+                          porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
                     else if (c == peridotiteF_idx)
                       reaction_rate_out->reaction_rates[i][c] =
-                          old_porosity[i] * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; //
+                          porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; // 
                     else if (c == porosity_idx)
                       reaction_rate_out->reaction_rates[i][c] =
                           -old_porosity[i] / melting_time_scale;
@@ -422,7 +414,7 @@ namespace aspect
                       reaction_rate_out->reaction_rates[i][c] = 0.0;
                   }
                   else // if ( c_tot_old > c_f) // temperature (composition) above liquidus - equilibrium porosity is 1
-                  {
+                  { // TODO porosity-old_porosity?
                     //if (in.position[i][1]<10e3) cout << "above L" <<"\n";
                     if (c == peridotite_idx)
                       reaction_rate_out->reaction_rates[i][c] =
