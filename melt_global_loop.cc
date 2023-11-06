@@ -72,134 +72,12 @@ namespace aspect
         melt_fractions[q] = 0.0;
       }
     }
-/*
 
-    template <int dim>
-    double
-    MeltGlobalMod<dim>::
-    c_fluid (const double temperature,
-             const double pressure) const
-    {
-      double T0=T00; //+ pressure_solidus_change*pressure;
-      double Tlim=Tlim0; //+ pressure_solidus_change*pressure;
-      double T05=1023.0; //or T0*0.25+Tlim*0.75;
-      double CWmaxP=10.0+(pressure-1.0e9)*8e-9;
-
-      double al=(-4.0*T05+2.0*(T0+Tlim))/(CWmaxP*CWmaxP);
-      //TODO Assert(al<>0)
-      double bl=(4.0*T05-Tlim-3.0*T0)/CWmaxP;
-      double cl=T0;
-      double disc= bl*bl-4.0*al*(cl-temperature);
-      if ( temperature >= T0)
-      {
-        return 0.0;
-      }
-      else if (disc>0)
-      {
-        double C = (-bl - std::sqrt(disc) )/(2.0*al);
-        //return 1.0 - C/CWmaxP;
-        return C; // return absolute composition
-      }
-      else
-        return CWmaxP; // TODO cbulk
-    }
-
-
-    template <int dim>
-    double
-    MeltGlobalMod<dim>::
-    c_solid (const double temperature,
-             const double pressure) const
-    {
-      double CWmaxP=10.0+(pressure-1.0e9)*8e-9;
-
-      double T0=T00; // + pressure_solidus_change*pressure;
-      double Tlim=Tlim0; // + pressure_solidus_change*pressure;
-      double cs=Tlim-Tknee;
-      double as=CWmaxP/(T0-Tlim)*(T0-cs)*(Tlim-cs); // TODO assert T0<>Tlim
-      double bs=as/(T0-cs); // TODO assert T0 <> cs
-
-      if (temperature >= T0 )
-      {
-        return 0.0;
-      }
-      else if (temperature >= Tlim )
-      {
-        double C = as/(temperature-cs)-bs;
-        //return 1.0 - C/CWmaxP; // return scaled composition C'
-        return C; // return absolute composition
-      }
-      else
-        return CWmaxP; // TODO cbulk??  // TODO assert T<>cs??
-    }
-*/
-/*
-    template <int dim>
-    double
-    MeltGlobalMod<dim>::
-    c_solid (const double temperature,
-             const double pressure) const
-    {
-      double Tmax=960.+205*pressure*1e-9+273.;
-      double Tlim=640.0+273.;
-      double DTknee=10.0;
-      double Tasymp=Tlim-DTknee;
-      double CWmaxP=30.;
-      double as=CWmaxP/(Tmax-Tlim)*(Tmax-Tasymp)*DTknee;
-      double bs=as/(Tmax-Tasymp);
-      if (temperature >= Tmax ) // above liquidus
-      {
-        return 0.0;
-      }
-      else if (temperature >= Tlim ) // above solidus
-      {
-        return as/(temperature-Tasymp)-bs;
-      }
-      else // below solidus
-        return CWmaxP; // TODO cbulk??
-    }
-
-    template <int dim>
-    double
-    MeltGlobalMod<dim>::
-    c_fluid (const double temperature,
-             const double pressure) const
-    {
-      double c=600.+273.;
-      double a=19.;
-      double b=29.;
-      double d=360.;
-      double e=205.;
-      double f=0.13;
-      double Tmax= c+d+e*pressure*1e-9;
-
-      double Tlim=640.0+273.;
-      double DTknee=10.0;
-      double Tasymp=Tlim-DTknee;
-      double CWmaxP=30.;
-      double as=CWmaxP/(Tmax-Tlim)*(Tmax-Tasymp)*DTknee;
-      double bs=as/(Tmax-Tasymp);
-      double csolidus=as/(temperature-Tasymp)-bs; // TODO div 0
-      double cliquidus=(a*pressure*1e-9+b)*(1-std::pow((temperature-c)/(d+e*pressure*1e-9),f));
-      
-      //w(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
-      if ( temperature >= Tmax) // above liquidus
-      {
-        return 0.0;
-      }
-      else if (csolidus < cliquidus)
-      {
-        return cliquidus; // return absolute composition
-      }
-      else
-        return CWmaxP; // TODO cbulk
-    }
-*/
     template <int dim>
     void
     MeltGlobalMod<dim>::
     c_sf (const double temperature,
-          const double pressure, double &c_s, double &c_f) const
+          const double pressure, double &c_s, double &c_f, int &PTfield) const
     {
       double c=600.+273.;
       //double a=19.;
@@ -212,28 +90,54 @@ namespace aspect
 
       double Tmax=c+d+eG*pressure; // dry solidus==dry liquidus - curves cross there
       //double Tmax= c+d+e*1e-9*pressure;
-      double Delta=2.;
-      double Tmin=(pressure<1e9 ? 640. + 273. + 100.*std::pow(pressure*1e-9-1.,2.)/1. : 640.+273.);
+      //double Delta=2.;
+      //double Tmin=(pressure<1e9 ? 640. + 273. + 100.*std::pow(pressure*1e-9-1.,2.)/1. : 640.+273.);
+      double Tmin=(pressure<1e9 ? 640. + 273. + 150.*std::pow(pressure*1e-9-1.,4.)/1. : 
+                  640.+273.+120.*(pressure*1e-9-1.)/1.); // pressure-dependent wet solidus temperature (Holtz 2001) combined with ???; works above 0.1 GPa
  
       double csolidus;
       double cliquidus;
 
       cliquidus=(aG*pressure+b)*(1-std::pow((std::max(Tmin,temperature)-c)/(d+eG*pressure),f));
-      //cliquidus=std::min((1e-9*a*pressure+b)*(1-std::pow((temperature-c)/(d+1e-9*e*pressure),f)),CWmax);
       //w(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
+      double wmax=(aG*pressure+b)*(1-std::pow((Tmin-c)/(d+eG*pressure),f));
 
-      csolidus=(temperature>Tmin ? Delta*cliquidus/(Tmax-Tmin)*
-           ( (Tmax-(Tmin-Delta))/(temperature-(Tmin-Delta)) - 1. )  : cliquidus );
+      //# shifted 1/x & 1/x solid composition
+      double Tmid=620.0 + 273. + 150.*pressure*1e-9; // # muscovite dehydration line
+      const double wmid=0.4;
+      const double wmin=0.0;
+      //Tmid=Tmax; wmid=wmin; # choose this to have single 1/x curve
+
+      //Delta=2 works fine for single 1/x composition
+      const double Delta1=2.; //# shift of the asymptote to the left of Tmin
+      const double Delta2=2.; //# shift of the asymptote to the left of Tmid
+      const double A1=(wmax-wmid)/(1.0/Delta1 -1.0/(Tmid-(Tmin-Delta1)));
+      const double B1=wmax-A1/Delta1;
+      const double A2=(wmid-wmin)/(1.0/Delta2 -1.0/(Tmax-(Tmid-Delta2)));
+      const double B2=wmid-A2/Delta2;
+
+      csolidus=(temperature > Tmin ? temperature < Tmid ?
+        A1/(temperature-(Tmin-Delta1)) + B1 :
+        A2/(temperature-(Tmid-Delta2)) + B2 :
+        cliquidus );
 
       if ( temperature >= Tmax) // above liquidus for all c
       {
         c_s=0.0;
         c_f=0.0;
+        PTfield=2;
       }
-      else 
+      else if (temperature > Tmin)
       {
         c_s=csolidus;
         c_f=cliquidus;
+        PTfield=1;
+      }
+      else
+      {
+        c_s=cliquidus; // is the same as csolidus
+        c_f=cliquidus;
+        PTfield=0;
       }
     }
 
@@ -281,8 +185,8 @@ namespace aspect
         temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
         // calculate composition dependence of density
         const double delta_rho = this->introspection().compositional_name_exists("peridotite")
-                                     ? composition_density_change * std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus))
-                                     : 0.0; // delta_rho is cropped - peridotite only in <-1,1> is used.
+                                     ? composition_density_change *(C_reference - old_peridotite[i]) // std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus))
+                                     : 0.0; // 
         out.densities[i] = (reference_rho_s + delta_rho) * temperature_dependence;
         // Calculate viscosity:
         out.viscosities[i] = eta_0;
@@ -294,7 +198,8 @@ namespace aspect
           // viscosity reduction due to porosity:
           out.viscosities[i] *= std::max(exp(-alpha_phi * porosity), 1e-4);
           // normalized solid composition:
-          const double C_solid_normalized = std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus));
+          const double C_solid_normalized = (C_reference-old_peridotite[i]);
+          //const double C_solid_normalized = std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus));
           // composition-dependent term:
           const double visc_composition_dependence = std::min(exp(alpha_composition * C_solid_normalized), delta_eta_composition_max);
           out.viscosities[i] *= visc_composition_dependence;
@@ -322,9 +227,36 @@ namespace aspect
         // Fill in melt material properties:
         if (melt_out != nullptr)
         {
-          melt_out->fluid_viscosities[i] = eta_f;
           melt_out->permeabilities[i] = reference_permeability * std::pow(porosity, 3) * std::pow(1.0 - porosity, 2);
           melt_out->fluid_density_gradients[i] = Tensor<1, dim>(); // not calculated
+
+          melt_out->fluid_viscosities[i] = eta_f;
+          double waterWtPc;
+          if (1 == 1)
+          {
+            waterWtPc = std::max(0.1,old_peridotiteF[i]);
+          }
+          else if (0 == 1)
+          {
+            /*function to fit temperature dependence of data (Holz 01, Fig. 4):
+            A=174.; B=-0.015; T0=16.6; P0=8.; dWdP=0.25; Tinfty=500.
+            Wfluid(T,P)=A/(T-Tinfty)+B*T+T0+(P-P0)*dWdP*/
+            const double temperatureReduced = std::max(in.temperature[i], 823.);
+            waterWtPc = 174. / (temperatureReduced - 773.) - 0.015 * (temperatureReduced - 273.) + 16.6 + (in.pressure[i] / 1e8 - 8.) * 0.25;
+          }
+          double thermal_fluid_viscosity_exponent = 1.;
+          if (thermal_fluid_viscosity_exponent > 0.0) // if visc exponent <== 0 then constant viscosity
+          {
+            const double invtemperature = 1.0 / std::max(in.temperature[i], 1.0);
+            /* viscosity according to Schulze etal 1995:
+             LogEta0=-2.5726 #-1.5726 for equation in Poise
+             EA(W)=(448.03-252.12*W**0.11)*1e3
+             LogEta(T,W)=LogEta0+EA(W)/(2.303*R*T)
+             eta(T,W)=10.0**LogEta(T,W) */
+            double eta_f_Schulze = std::pow(10.0, -2.5726 + (448.03 - 252.12 * std::pow(waterWtPc, 0.11)) * 1e3 / (2.303 * 8.31) * invtemperature);
+            //double eta_f_Scaillet = std::pow(10.0, -7.5461 + 16280.*invtemperature + (0.59784-1235.4*invtemperature)*waterWtPc); // too low?!
+            melt_out->fluid_viscosities[i] = std::max(std::min(eta_f_Schulze, 1e6), 1e2);
+          }
 
           // Calculate melt density:
           // compositional dependence of melt density is neglected, as it is smaller than for solid density
@@ -359,10 +291,11 @@ namespace aspect
             //double c_f = c_fluid(in.temperature[i], lithostatic_pressure);
             double c_s;
             double c_f;
-            c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f);
+            int PTfield=0;
+            c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f, PTfield);
             
             if (c_f < c_s + 1e-5)
-              c_f = c_s + 1e-5; // avoid (im)possible division by zero and switch between c_f and c_s
+              c_f = c_s + 1e-5; // avoid possible division by zero and switch between c_f and c_s
 
             // Calculate updates of porosity and compositions.
             // Updates of solid and melt compositions are calculated from mass conservation
@@ -382,11 +315,25 @@ namespace aspect
                   {
                     //if (in.position[i][1]<10e3) cout << "below S" <<"\n";
                     if (c == peridotite_idx)
+                     if (PTfield > 0)
                       reaction_rate_out->reaction_rates[i][c] =
                           porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
+                     else
+                      reaction_rate_out->reaction_rates[i][c] =
+                          (c_tot_old-old_peridotite[i]) / melting_time_scale;
                     else if (c == peridotiteF_idx)
+                     if (PTfield > 0)
                       reaction_rate_out->reaction_rates[i][c] =
                           porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; // 
+                     else
+                     {
+                      //if (old_peridotite[i]>3.) cout << lithostatic_pressure << " " << in.temperature[i]
+                      //<< " " << old_porosity[i] << " " << old_peridotite[i]
+                      //<< " " << c_tot_old << " " 
+                      //<< old_peridotiteF[i] << "\n";
+                      reaction_rate_out->reaction_rates[i][c] =
+                          (c_tot_old-old_peridotite[i]) / melting_time_scale;
+                     }
                     else if (c == porosity_idx)
                       reaction_rate_out->reaction_rates[i][c] =
                           -old_porosity[i] / melting_time_scale;
@@ -418,10 +365,10 @@ namespace aspect
                     //if (in.position[i][1]<10e3) cout << "above L" <<"\n";
                     if (c == peridotite_idx)
                       reaction_rate_out->reaction_rates[i][c] =
-                          (1.0 - old_porosity[i]) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale;
+                          (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale;
                     else if (c == peridotiteF_idx)
                       reaction_rate_out->reaction_rates[i][c] =
-                          (1.0 - old_porosity[i]) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; // 
+                          (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; // 
                     else if (c == porosity_idx)
                       reaction_rate_out->reaction_rates[i][c] =
                           (1.0 - old_porosity[i]) / melting_time_scale;
@@ -589,7 +536,7 @@ namespace aspect
           composition_density_change = prm.get_double("Composition density change");
           surface_solidus = prm.get_double("Surface solidus");
           dT_solidus_liquidus = prm.get_double("Solidus liquidus difference");
-          dC_solidus_liquidus = prm.get_double("Solidus liquidus composition difference");
+          dC_solidus_liquidus = prm.get_double("Solidus liquidus composition difference"); // TODO remove this
           C_reference = prm.get_double("Reference solid composition");
           pressure_solidus_change = prm.get_double("Pressure solidus change");
           include_melting_and_freezing = prm.get_bool("Include melting and freezing");
