@@ -185,7 +185,7 @@ namespace aspect
         temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
         // calculate composition dependence of density
         const double delta_rho = this->introspection().compositional_name_exists("peridotite")
-                                     ? composition_density_change *(C_reference - old_peridotite[i]) // std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus))
+                                     ? - std::max(0.1, std::min(10.0, old_peridotite[i]))
                                      : 0.0; // 
         out.densities[i] = (reference_rho_s + delta_rho) * temperature_dependence;
         // Calculate viscosity:
@@ -201,7 +201,8 @@ namespace aspect
           const double C_solid_normalized = (C_reference-old_peridotite[i]);
           //const double C_solid_normalized = std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus));
           // composition-dependent term:
-          const double visc_composition_dependence = std::min(exp(alpha_composition * C_solid_normalized), delta_eta_composition_max);
+          //const double visc_composition_dependence = std::min(exp(alpha_composition * C_solid_normalized), delta_eta_composition_max);
+          const double visc_composition_dependence = 1./std::max(0.1,std::min(10.0,old_peridotite[i]));
           out.viscosities[i] *= visc_composition_dependence;
           // temperature dependence of viscosity:
           double visc_temperature_dependence = 1.0;
