@@ -1,7 +1,7 @@
 
 set Additional shared libraries            = ./libmelt_global_mod.so
 
-set Output directory                       = outputs/melt-2d-petrol-hf45
+set Output directory                       = outputs/melt-2d-petrol-c2-hf45
 set Use years in output instead of seconds = true
 
 #set Resume computation = true
@@ -152,7 +152,7 @@ subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      = x,y
-    set Function constants  = H=2e3, c0=0.5, cF0=10.0 #2
+    set Function constants  = H=2e3, c0=2.0, cF0=10.0 #2
     set Function expression = 0; (y<H? c0*y/H : c0) ; (y<H? cF0*y/H : cF0)
   end
 end
@@ -182,7 +182,7 @@ subsection Material model
     set Reference solid density                   = 2800.0
     set Reference melt density                    = 2400.0
     set Thermal expansion coefficient             = 3e-5
-    set Composition density change                = 18.0 #200.0
+    set Composition density change                = 19.0 #200.0
 
     set Reference permeability                    = 1e-7 # equals reference Darcy coefficient with melt viscosity of 1e4 Pa s
     set Reference melt viscosity                  = 1e4 # included in Reference permeability
@@ -234,10 +234,8 @@ subsection Mesh refinement
   end
 
   subsection Composition threshold
-    set Compositional field thresholds = 0.01, 0.51, 100.0
-   #Change to obtain a high resolution also in depleted regions:
-   #set Compositional field thresholds = 0.01, 0.01, 1.01
-  end
+    set Compositional field thresholds = 0.01, 2.1, 100.0
+ end
 end
 
 ##################### Postprocessing ########################
