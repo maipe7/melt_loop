@@ -151,7 +151,8 @@ namespace aspect
       c_sf(const double temperature,
            const double pressure,
            double &c_s,
-           double &c_f) const;
+           double &c_f,
+           int &PTfield) const;
     };
 
   }
