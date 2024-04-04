@@ -1,7 +1,10 @@
 outputs/
 OLD/
-CMakeCache.txt
 d.txt
+CMakeFiles
+CMakeCache.txt
+Makefile
+cmake_install.cmake
 
 # Compiled source #
 ###################
