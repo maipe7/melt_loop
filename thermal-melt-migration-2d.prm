@@ -36,8 +36,6 @@ subsection Melt settings
 end
 
 subsection Formulation
- #set Enable additional Stokes RHS = false
- #set Enable elasticity = false
 end
 
 subsection Geometry model
