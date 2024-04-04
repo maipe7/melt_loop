@@ -1,3 +1,4 @@
+#cmake -DAspect_DIR=/opt/aspect/src/build .; make
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 
 FIND_PACKAGE(Aspect 2.4.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
@@ -10,7 +11,13 @@ ENDIF ()
 
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
-SET(TARGET "melt_global_mod")
+SET(TARGET "melt_petrol")
 PROJECT(${TARGET})
-ADD_LIBRARY(${TARGET} SHARED melt_global_loop.cc)
+ADD_LIBRARY(${TARGET} SHARED melt_petrol.cc)
+ASPECT_SETUP_PLUGIN(${TARGET})
+
+
+SET(TARGET "c_heating")
+PROJECT(${TARGET})
+ADD_LIBRARY(${TARGET} SHARED c_heating.cc)
 ASPECT_SETUP_PLUGIN(${TARGET})

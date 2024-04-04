@@ -1,5 +1,7 @@
 outputs/
 OLD/
+CMakeCache.txt
+d.txt
 
 # Compiled source #
 ###################

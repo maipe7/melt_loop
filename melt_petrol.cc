@@ -73,41 +73,62 @@ namespace aspect
       }
     }
 
+    inline double fTwetsolid(double pressure)
+    // pressure-dependent wet solidus temperature (Holtz 2001) combined with ???; 
+    // works above 0.1 GPa
+    // pressure in Pa
+      { return (pressure < 1e9 ? 
+                        640. + 273. + 150. * std::pow(pressure * 1e-9 - 1., 4.) / 1. : 
+                        640. + 273. +  50. * std::pow(pressure * 1e-9 - 1., 2.) / 1.); 
+      }
+
+    inline double fTmus(double pressure)
+    // muscovite dehydration line according to Thermocalc; 
+    // experiments put it higher (Patino Douce and Harris, 1998)
+    // pressure in Pa
+      { return 620.0 + 273. + 130. * pressure * 1e-9;                  
+      }
+
     template <int dim>
     void
     MeltPetrol<dim>::
         c_sf(const double temperature,
              const double pressure, double &c_s, double &c_f, int &PTfield) const
     {
-      double c = 600. + 273.;
-      // double a=19.;
-      double aG = 19e-9;
-      double b = 29.;
-      double d = 360.;
-      // double e=205.;
-      double eG = 205e-9;
-      double f = 0.13;
+      const double pressure0=1e9; // reference pressure for phase diagram construction
+      //const double wSat = wBt + wMu0 + wMu1;
 
+      const double c = 600. + 273.;
+      const double aG = 19e-9;
+      const double b = 29.;
+      const double d = 360.;
+      const double eG = 205e-9;
+      const double f = 0.13;
+
+      double Twetsolid = fTwetsolid(pressure);
+      double TwetsolidP0 = fTwetsolid(pressure0);
+      // wliquidus(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
+      double cliquidus = (aG * pressure + b) * (1 - std::pow((std::max(Twetsolid, temperature) - c) / (d + eG * pressure), f));
       double Tdrysolid = c + d + eG * pressure; // dry solidus==dry liquidus - curves cross there
-      // double Tmax= c+d+e*1e-9*pressure;
-      // double Delta=2.;
-      // double Tmin=(pressure<1e9 ? 640. + 273. + 100.*std::pow(pressure*1e-9-1.,2.)/1. : 640.+273.);
-      double Twetsolid = (pressure < 1e9 ? 640. + 273. + 150. * std::pow(pressure * 1e-9 - 1., 4.) / 1. : 640. + 273. + 50. * std::pow(pressure * 1e-9 - 1., 2.) / 1.); // pressure-dependent wet solidus temperature (Holtz 2001) combined with ???; works above 0.1 GPa
-
-      double csolidus;
-      double cliquidus;
-
-      const double wSat = wBt + wMu0 + wMu1;
-
-      cliquidus = (aG * pressure + b) * (1 - std::pow((std::max(Twetsolid, temperature) - c) / (d + eG * pressure), f));
-      // w(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
       double wmax = (aG * pressure + b) * (1 - std::pow((Twetsolid - DT - c) / (d + eG * pressure), f)); // composition at wet solidus - DT
-      double Tmus = 620.0 + 273. + 130. * pressure * 1e-9;                                               // # muscovite dehydration line according to Thermocalc; experiments put it higher (Patino Douce and Harris, 1998)
-      double wlin1 = (wBt + wMu0) + (wMu1) * (temperature - Tmus) / (Twetsolid - Tmus);
-      double wlin0 = (wBt) * (temperature - Tdrysolid) / (Tmus - Tdrysolid);
+      double Tmus = fTmus(pressure);
+      double Tmus0= fTmus(pressure0);
 
-      csolidus = (temperature > Twetsolid - DT ? (temperature > Twetsolid ? (temperature > Tmus - DT ? (temperature > Tmus ? wlin0 : wBt + wMu0 * (Tmus - temperature) / DT) : wlin1) : wSat + (wmax - wSat) * ((Twetsolid - temperature) / DT)) : cliquidus);
-
+      //double wlin0 = (wBt) * (temperature - Tdrysolid) / (Tmus - Tdrysolid); // fixed wBt point for all pressures
+      double wlin0     = (wBt) * (temperature - Tdrysolid) / (Tmus0 - Tdrysolid);  // crossing same reference point - preferred
+      double wlin0Tmus = (wBt) * (Tmus - Tdrysolid) /        (Tmus0 - Tdrysolid);  //
+      //double wlin1 = (wBt + wMu0) + (wMu1) * (temperature - Tmus) / (Twetsolid - Tmus); // fixed wMus point
+      double wlin1          = (wlin0Tmus + wMu0) + (wMu1) * (temperature - Tmus) / (TwetsolidP0 - Tmus0); // fixed wMu0 (jump in muscovite), fixed slope - preferred
+      double wlin1Twetsolid = (wlin0Tmus + wMu0) + (wMu1) * (Twetsolid - Tmus) / (TwetsolidP0 - Tmus0); // fixed wMu0 (jump in muscovite), fixed slope - preferred
+      double csolidus = (temperature > Twetsolid - DT ? 
+                  (temperature > Twetsolid ? 
+                   (temperature > Tmus - DT ? 
+                    (temperature > Tmus ? 
+                    wlin0 : 
+                    wlin0Tmus + wMu0 * (Tmus - temperature) / DT) : 
+                   wlin1) : 
+                  wlin1Twetsolid + (wmax - wlin1Twetsolid) * ((Twetsolid - temperature) / DT)) 
+                 : cliquidus);
       if (temperature >= Tdrysolid) // above liquidus for all c
       {
         c_s = 0.0;
@@ -151,7 +172,6 @@ namespace aspect
             max_depth = std::max(max_depth, in.position[i][1]);
           }
         }
-      //cout << max_depth << "        ";
     }
 
     template <int dim>
@@ -208,7 +228,13 @@ namespace aspect
                  ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                             "not filled by the caller."));
           // viscosity reduction due to porosity:
-          out.viscosities[i] *= std::max(exp(-alpha_phi * porosity), 1e-4);
+          //out.viscosities[i] *= std::max(exp(-alpha_phi * porosity), 1e-4); // ref
+          //out.viscosities[i] *= exp(-alpha_phi * porosity); // exp
+          double A=0.05; double width=0.26; // coke // fits Costa/Keller well for 5 orders of magnitude decrease
+          out.viscosities[i] *=  exp(-alpha_phi * porosity)*((porosity>A) ? (porosity<A+width ? 
+           ( std::exp(-width/(-porosity+A+width))/ 
+           (std::exp(-width/(-porosity+A+width)) + std::exp(-width/(width -(-porosity+A+width))))   ) : 0.0 ) : 1.0);
+          
           // normalized solid composition:
           const double C_solid_normalized = (old_peridotite[i] - C_reference);
           // const double C_solid_normalized = std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus));
@@ -277,7 +303,9 @@ namespace aspect
           temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
           melt_out->fluid_densities[i] = (reference_rho_f + delta_rho) * temperature_dependence;
           // compaction viscosity defined relatively to shear viscosity
-          melt_out->compaction_viscosities[i] = out.viscosities[i] * (2.0 + 0.3 / std::max(porosity, 3e-4));
+          melt_out->compaction_viscosities[i] = out.viscosities[i] * (2.0 + 0.3 / std::max(porosity, 3e-4)); // ref
+          //melt_out->compaction_viscosities[i] = out.viscosities[i] / (1.0 - std::min(porosity, 1.0-3e-4))/ (std::max(porosity, 3e-4)); // 1-phi
+          //melt_out->compaction_viscosities[i] = out.viscosities[i] / (std::max(porosity, 3e-4)); // 1over
           // melt_out->compaction_viscosities[i] = out.viscosities[i]*(2.0-2.7*std::log10(std::max(porosity,1e-3))); // uncomment for logarithmic dependence of bulk viscosity
         }
 
@@ -511,7 +539,7 @@ namespace aspect
                             "H2O in rock bond in biotite (Wt%).");
           prm.declare_entry("Water in muscovite", "0.5",
                             Patterns::Double(0.),
-                            "H2O in rock bond in muscovite (Wt%).");
+                            "Total H2O in rock bond in muscovite (Wt%).");
           prm.declare_entry("Jump in muscovite", "0.2",
                             Patterns::Double(0.),
                             "How much water is released during muscovite dehydration reaction (in Wt%).");

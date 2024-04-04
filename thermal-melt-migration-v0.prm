@@ -1,22 +1,21 @@
-# TESTING THE GIT-VSCODE 
 # this model is 1D-like
-# needs relatively high resolution to show good results (reproduce analytical static geotherm)
 # TODO:
 # Find source of oscillations in rhof=rhos case
 # Find source of composition leak
+# THERE IS A PROBLEM WITH MESH REFINEMENT AND MELT FLOW!
 
-set Additional shared libraries            = ./libmelt_petrol.so
+set Additional shared libraries            = ./libmelt_petrol.so, ./libc_heating.so
 
 set Dimension                              = 2
-set Output directory                       = outputs/thermal-melt-petrol-6/
+set Output directory                       = outputs/thermal-melt-petrol-3/
 set Use years in output instead of seconds = true
 set Maximum time step                      = 1e5
 set Maximum first time step                = 1e4
 set Maximum relative increase in time step = 20
 set End time                               = 30e6
-set Nonlinear solver scheme = single Advection, single Stokes
+set Nonlinear solver scheme = single Advection, iterated Stokes
 
-#set Resume computation = true
+#set Resume computation = true # attention - which timestep is the last checkpoint?
 
 # Use operator splitting scheme to correctly calculate reaction terms:
 set Use operator splitting                 = true
@@ -31,18 +30,29 @@ subsection Solver parameters
 end
 
 subsection Melt settings
-  set Include melt transport = true
+  set Include melt transport = true #false
   set Heat advection by melt = true
   set Melt scaling factor threshold = 1.0
+end
+
+subsection Formulation
+ #set Enable additional Stokes RHS = false
+ #set Enable elasticity = false
 end
 
 subsection Geometry model
   set Model name = box
    subsection Box
-     set X extent = 0.5e3 #2e3
-     set Y extent = 70e3
-     set Y repetitions = 140 #35 #120
+     set X extent = 4e3 #0.125e3 ##0.5e3 #2e3
+     set Y extent = 80e3
+     set Y repetitions = 20 #640
    end
+end
+
+subsection Discretization
+ #set Composition polynomial degree = 2 [Integer range 0...2147483647 (inclusive)]
+ #set Stokes velocity polynomial degree = 2 [Integer range 1...2147483647 (inclusive)]
+ #set Temperature polynomial degree = 1 ... has negligible effect
 end
 
 subsection Gravity model
@@ -54,23 +64,30 @@ end
 
 subsection Boundary velocity model
   set Prescribed velocity boundary indicators = bottom y:function, left x:function, right x:function
-  #set Model name = function
-  subsection Function # reasonable values - verosion<0.0005, vtecto ~0.001m/yr
-    set Function constants = \
-      vtecto=0.002, verosion=0.001, maxdepth=70e3, \
-      channelbot=35e3, channelwidth=20e3, width=0.5e3, tcorr=0e6
+  subsection Function
+   set Function constants = \
+     vtecto=0.00, verosion=0.00, maxdepth=80e3, width=4e3, \
+     vtecto2=-0.00, channelbot2=60e3, channelwidth2=10e3, \
+    channelbot=45e3, channelwidth=20e3, tcorr=0e6
+    #channelbot=45e3, channelwidth=20e3, tcorr=0e6
     # set Function expression = \
-    #    ((y>channelbot && \
+    #    ((y>channelbot-(vtecto-verosion)*(t-tcorr) && \
     #      y<channelbot+channelwidth) ? \
-    #    0.25*pi*width/channelwidth*(x>1? -1 : 1)* \
-    #      vtecto*sin(pi*(y-channelbot)/channelwidth) : 0 ); \
-    #    0 
+    #    0.25*pi*width/(channelwidth+(vtecto-verosion)*(t-tcorr))*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion)*(t-tcorr))/(channelwidth+(vtecto-verosion)*(t-tcorr))) : 0 ); \
+    #    -vtecto+verosion
+    # set Function expression = \
+    #     ((y>channelbot-(vtecto-verosion)*(t-tcorr) && \
+    #       y<channelbot+channelwidth-(vtecto-verosion)*(t-tcorr) ) ? \
+    #     0.25*pi*width/(channelwidth)*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion)*(t-tcorr))/(channelwidth)) : 0 ) \
+    #     ; -vtecto+verosion
     set Function expression = \
-       ((y>channelbot-(vtecto-verosion)*(t-tcorr) && \
-         y<channelbot+channelwidth-(vtecto-verosion)*(t-tcorr)) ? \
-       0.25*pi*width/channelwidth*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion)*(t-tcorr))/channelwidth) : 0 ); \
-       -vtecto+verosion
-
+        ((y>channelbot-(vtecto-verosion+vtecto2)*(t-tcorr) && \
+          y<channelbot+channelwidth-(vtecto-verosion+vtecto2)*(t-tcorr) ) ? \
+        0.25*pi*width/(channelwidth)*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion+vtecto2)*(t-tcorr))/(channelwidth)) : 0 ) \
+        + ((y>channelbot2 && \
+          y<channelbot2+channelwidth2 ) ? \
+        0.25*pi*width/(channelwidth2)*(x>1? -1 : 1)*vtecto2*sin(pi*(y-channelbot2)/(channelwidth2)) : 0 ) \
+        ; -vtecto+verosion-vtecto2
   end
 end
 
@@ -78,24 +95,24 @@ subsection Initial temperature model
   set List of model names = function
 #values for 30 km upper crust with 2e-6 productivity + X km LC with zero productivity
 # qbot=30e-3
-#A1= -4e-07 , B1= 0.036 , C1= 273.0
-#A2= 0.0 , B2= 0.012 , C2= 633.0
-#q0,q1,qH= -0.09 -0.03 -0.03
+#A1= -4e-07 , B1= 0.036 , C1= 273.0 #A2= 0.0 , B2= 0.012 , C2= 633.0
 #values for 30 km upper crust with 2e-6 productivity + X km LC with zero productivity
 # qbot=20e-3
-#A1= -4e-07 , B1= 0.032 , C1= 273.0
-#A2= 0.0 , B2= 0.008 , C2= 633.0
+#A1= -4e-07 , B1= 0.032 , C1= 273.0 #A2= 0.0 , B2= 0.008 , C2= 633.0
 #values for 35 km upper crust with 2e-6 productivity + X km LC with zero productivity
 # qbot=20e-3
-#A1= -4e-07 , B1= 0.036 , C1= 273.0
-#A2= 0.0 , B2= 0.008 , C2= 763.0
-
+#A1= -4e-07 , B1= 0.036 , C1= 273.0 #A2= 0.0 , B2= 0.008 , C2= 763.0
+# 30 km , 1.5 productivity, qbot 20
+#A1= -3e-07 , B1= 0.026 , C1= 273.0 #A2= 0.0 , B2= 0.008 , C2= 543.0
+# 35 km crust, dtto
+#A1= -3e-07 , B1= 0.029 , C1= 273.0 #A2= 0.0 , B2= 0.008 , C2= 640.5
   subsection Function
-    set Function constants = yLC=35e3, maxy=70e3, A1=-3.4e-07, B1=0.0318, C1=273.0, A2= 0.0 , B2= 0.008, C2= 689.5
-    #set Function constants = yLC=35e3, maxy=70e3, A1=-4e-07, B1=0.036, C1=273.0, A2= 0.0 , B2= 0.008 , C2= 763.0
-    #set Function constants = yLC=40e3, maxy=70e3, A1=-4e-07, B1=0.032, C1=273.0, A2= 0.0 , B2= 0.008 , C2= 633.0
+    #set Function constants = zLC=35e3, maxy=80e3, A1=-3e-07, B1=0.029, C1=273.0, A2= 0.0 , B2= 0.008, C2= 640.5
+    #set Function constants = zLC=35e3, maxy=80e3, A1=-4e-07, B1=0.036, C1=273.0, A2= 0.0 , B2= 0.008 , C2= 763.0
+    #set Function constants = zLC=35e3, maxy=80e3, A1=-3.4e-07, B1=0.0318, C1=273.0, A2= 0.0 , B2= 0.008, C2= 689.5
+    set Function constants = zLC=30e3, maxy=80e3, A1=-4e-07, B1=0.032, C1=273.0, A2= 0.0 , B2= 0.008 , C2= 633.0
     #set Function constants = yLC=40e3, maxy=70e3, A1=-4e-07, B1=0.036, C1=273.0, A2= 0.0 , B2= 0.012 , C2= 633.0
-    set Function expression = (y>yLC ? A1*(maxy-y)^2+B1*(maxy-y)+C1 :  A2*(maxy-y)^2+B2*(maxy-y)+C2)
+    set Function expression = (y>(maxy-zLC) ? A1*(maxy-y)^2+B1*(maxy-y)+C1 :  A2*(maxy-y)^2+B2*(maxy-y)+C2)
   end
 end
 
@@ -116,19 +133,15 @@ end
  end
 
 subsection Heating model
-  set List of model names = latent heat melt, function
+  set List of model names = latent heat melt, composition melt heating #function
   subsection Latent heat melt
     set Melting entropy change = -300.0
   end
- subsection Function
-   set Function constants = \
-     yLC=35e3, vtecto=0.002, verosion=0.001, maxdepth=70e3, tcorr=0e6
- #  set Function expression = (y > 10e3 ? 2e-6/2800. : 0)
-   set Function expression = (y>yLC-(vtecto-verosion)*(t-tcorr) ? 1.7e-6/2800. : 0)
- end
- #subsection Compositional heating # in W/m3 or W/kg?? TODO test
- #  set Compositional heating values = 0, 2e-6 # 1e-11, 1e-10
- #end
+  subsection Composition melt heating
+    set Heat production for reference composition = 2.86e-6 # W/m3, valid for c=1, 2e-6
+    #set Heat production for reference composition = 2.43e-6 # W/m3, valid for c=1, 1.7e-6
+    #set Heat production for reference composition = 2.14e-6 # W/m3, valid for c=1, 1.5e-6
+  end
 end
 
 ############# Composition, IC and BC ########################
@@ -149,8 +162,11 @@ subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      = x,y
-    set Function constants  = yLC=35e3, c0=0.7 #2
-    set Function expression = 0; (y<yLC || y>80e3? 0.0 : c0) ; (y<yLC || y>80e3 ? 0.0 : c0)
+    set Function constants  = yLCt=30e3, c0=0.7, maxdepth=80e3, twidth=10e3, width=1e3, BCwidth=0e3
+    #set Function expression = 0; (y<(maxdepth-zLC) || y>80e3? 0.0 : c0) ; (y<yLC || y>80e3 ? 0.0 : c0)
+    set Function expression = 0; \
+     (x>BCwidth)&&(x<width-BCwidth) ?  ((y<yLCt) ? (y>yLCt-twidth ?  c0*( exp(-twidth/(y-yLCt+twidth))/ ( exp(-twidth/(y-yLCt+twidth)) + exp(-twidth/(twidth - (y-yLCt+twidth))))   ) : 0.0 ) : c0) : 0.0; \
+     (x>BCwidth)&&(x<width-BCwidth) ?((y<yLCt) ? (y>yLCt-twidth ?  c0*( exp(-twidth/(y-yLCt+twidth))/ ( exp(-twidth/(y-yLCt+twidth)) + exp(-twidth/(twidth - (y-yLCt+twidth))))   ) : 0.0 ) : c0) : 0.0
   end
 end
 
@@ -179,31 +195,24 @@ subsection Material model
     set Reference solid density                   = 2800.0
     set Reference melt density                    = 2400.0
     set Thermal expansion coefficient             = 0e-5
-    set Composition density change                = 0.0 #200.0
+    set Composition density change                = 200.0
 
-    set Reference permeability                    = 1e-9
+    set Reference permeability                    = 1e-7
     set Reference melt viscosity                  = 1e4 # overwritten in .cc file
 
-    set Water in biotite                          = 0.43
-    set Water in muscovite                        = 0.57
-    set Jump in muscovite                         = 0.22
+    set Water in biotite                          = 0.5
+    set Water in muscovite                        = 0.5 # total in muscovite
+    set Jump in muscovite                         = 0.2
     set Temperature width of dehydration reaction = 10
 
     set Reference solid composition               = 1.0
     set Reference strainrate                      = 1e-14
     set Stress viscosity exponent                 = 2.4
-    set Reference shear viscosity                 = 2.27e7
+    set Reference shear viscosity                 = 2.27e8 #2.27e7
     set Activation energy                         = 156000.0
     set Exponential melt weakening factor         = 20.0
     set Exponential compositional strengthening factor = 4.6
     set Maximum compositional viscosity change    = 1e4
-      # //const double wBt = 0.43;
-      # //const double wMu0 = 0.22;
-      # //const double wMu1 = 0.35;
-      # //const double wBt = 0.6;
-      # //const double wMu0 = 0.4;
-      # //const double wMu1 = 0.5;
-      # //const double DT = 10.0;
   end
 end
 
@@ -211,23 +220,24 @@ subsection Mesh refinement
   set Initial global refinement                = 0
   set Initial adaptive refinement              = 0
   set Time steps between mesh refinement       = 0
+  #set Additional refinement times = 20e6
 end
 
 subsection Postprocess
-  set List of postprocessors = visualization, temperature statistics,  composition statistics, particles, depth average
+  set List of postprocessors = visualization, temperature statistics, velocity statistics, composition statistics, particles, depth average
   subsection Visualization
-    set List of output variables      = material properties, heating, heat flux map,  melt material properties
+    set List of output variables      = material properties, heating, heat flux map,  melt material properties,  strain rate
     subsection Material properties
       set List of material properties = density, viscosity
     end
     subsection Melt material properties
-      set List of properties =  fluid density, fluid viscosity, is melt cell, darcy coefficient
+      set List of properties =  fluid density, fluid viscosity, is melt cell, darcy coefficient,  compaction viscosity,  permeability
     end
     set Time between graphical output = 1e6
   end
   subsection Depth average
     set List of output variables = temperature, composition, log viscosity
-    set Number of zones = 70
+    set Number of zones = 80
     set Output format = txt #gnuplot
     set Time between graphical output = 1e6
   end
@@ -247,6 +257,7 @@ subsection Postprocess
   end
 end
 subsection Checkpointing
-  set Steps between checkpoint = 100
+  set Steps between checkpoint = 10
 end
+
 
