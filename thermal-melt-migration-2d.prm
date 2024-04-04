@@ -146,9 +146,9 @@ subsection Heating model
     set Melting entropy change = -300.0
   end
   subsection Composition melt heating
-    set Heat production for reference composition = 2.86e-6 # W/m3, valid for c=1, 2e-6
-    #set Heat production for reference composition = 2.43e-6 # W/m3, valid for c=1, 1.7e-6
-    #set Heat production for reference composition = 2.14e-6 # W/m3, valid for c=1, 1.5e-6
+    set Reference composition = 0.7
+    set Heat production for reference composition = 2e-6 # W/m3, valid for cref
+    #set Heat production for reference composition = 1.5e-6 # W/m3, valid for cref
   end
 end
 
