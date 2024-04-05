@@ -7,12 +7,13 @@
 set Additional shared libraries            = ./libmelt_petrol.so, ./libc_heating.so
 
 set Dimension                              = 2
-set Output directory                       = outputs/thermal-melt-petrol-3-2d/
+set Output directory                       = outputs/thermal-melt-petrol-2d-k0/
 set Use years in output instead of seconds = true
-set Maximum time step                      = 1e5
+#set Maximum time step                      = 1e5
+set Maximum time step                      = 5e5
 set Maximum first time step                = 1e4
 set Maximum relative increase in time step = 20
-set End time                               = 30e6
+set End time                               = 40e6
 set Nonlinear solver scheme = single Advection, iterated Stokes
 
 #set Resume computation = true # attention - which timestep is the last checkpoint?
@@ -43,15 +44,12 @@ subsection Geometry model
    subsection Box
      set X extent = 160e3 ##0.5e3 #2e3
      set Y extent = 80e3
-     set X repetitions = 16 #20
-     set Y repetitions = 8 #10
+     set X repetitions = 32 #20
+     set Y repetitions = 16 #10
    end
 end
 
 subsection Discretization
- #set Composition polynomial degree = 2 [Integer range 0...2147483647 (inclusive)]
- #set Stokes velocity polynomial degree = 2 [Integer range 1...2147483647 (inclusive)]
- #set Temperature polynomial degree = 1 ... has negligible effect
 end
 
 subsection Gravity model
@@ -63,61 +61,48 @@ end
 
 subsection Boundary velocity model
   set Prescribed velocity boundary indicators = bottom y:function, left x:function, right x:function
+  #set Prescribed velocity boundary indicators = top y:function, left x:function, right x:function
   subsection Function
+  # constant or exponential shortening
+  # for (theoretically) constant strainrate~vx/(s0-sx)~v0*exp(-t/tchar)/(s0-v0*tchar*(1-exp(-t/tchar)))
+  # then v0(m/yr)=s0(km)/tchar(Myr), after tchar, the velocity decreases to 36%
    set Function constants = \
-     vtecto=0.00, verosion=0.00, maxdepth=80e3, width=160e3, \
-     vtecto2=-0.00, channelbot2=60e3, channelwidth2=10e3, \
-    channelbot=40e3, channelwidth=30e3, tcorr=0e6
+     vtecto=0.00, verosion=0.000, verosion2=0e-10, \
+     maxdepth=80e3, width=160e3, tchar=30e6 # tchar=half of x size (minus margin)/vtecto
     set Function expression = \
-       (x>1? -1 : 1)*vtecto; \
-       -vtecto+verosion
-    # set Function expression = \
-    #    ((y>channelbot && \
-    #      y<channelbot+channelwidth) ? \
-    #    0.25*pi*width/(channelwidth+(vtecto-verosion)*(t-tcorr))*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion)*(t-tcorr))/(channelwidth+(vtecto-verosion)*(t-tcorr))) : 0 ); \
-    #    -vtecto+verosion
-    # set Function expression = \
-    #    ((y>channelbot-(vtecto-verosion)*(t-tcorr) && \
-    #      y<channelbot+channelwidth) ? \
-    #    0.25*pi*width/(channelwidth+(vtecto-verosion)*(t-tcorr))*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion)*(t-tcorr))/(channelwidth+(vtecto-verosion)*(t-tcorr))) : 0 ); \
-    #    -vtecto+verosion
-    # set Function expression = \
-    #     ((y>channelbot-(vtecto-verosion)*(t-tcorr) && \
-    #       y<channelbot+channelwidth-(vtecto-verosion)*(t-tcorr) ) ? \
-    #     0.25*pi*width/(channelwidth)*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion)*(t-tcorr))/(channelwidth)) : 0 ) \
-    #     ; -vtecto+verosion
-    # set Function expression = \
-    #     ((y>channelbot-(vtecto-verosion+vtecto2)*(t-tcorr) && \
-    #       y<channelbot+channelwidth-(vtecto-verosion+vtecto2)*(t-tcorr) ) ? \
-    #     0.25*pi*width/(channelwidth)*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion+vtecto2)*(t-tcorr))/(channelwidth)) : 0 ) \
-    #     + ((y>channelbot2 && \
-    #       y<channelbot2+channelwidth2 ) ? \
-    #     0.25*pi*width/(channelwidth2)*(x>1? -1 : 1)*vtecto2*sin(pi*(y-channelbot2)/(channelwidth2)) : 0 ) \
-    #     ; (y<1e3 ? -vtecto+verosion-vtecto2 : 0.0 )
+      (x>1? -1 : 1)*vtecto*exp(-t/tchar) ;\
+      (y>1? verosion+verosion2*t : -vtecto*exp(-t/tchar)+verosion+verosion2*t)
+
+  #  set Function constants = \
+  #    vtecto=0.002, verosion=0.00, maxdepth=80e3, width=160e3, \
+  #    channelbot=45e3, channelwidth=20e3, verosion2=0e-10, \
+  #    vtecto2=-0.00, channelbot2=60e3, channelwidth2=10e3, tcorr=0e6
+      # Constant thickening vtecto, linearly increasing erosion ve=ve1+ve2*t:
+    # at bottom boundary, tectonic and erosion velocity balance at t=(vt-ve1)/ve2
+    # at this time, downward displacement of UC/LC boundary is dzmax=0.5*(vt-ve1)**2/ve2
+    # erosion must be >= 0 at all times
+    #  set Function expression = \
+    #     ((y>channelbot-(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr) && \
+    #       y<channelbot+channelwidth) ? \
+    #     0.25*pi*width/(channelwidth+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))* \
+    #     (x>1? -1 : 1)* \
+    #     vtecto*sin(pi*(y-channelbot+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))/ \
+    #     (channelwidth+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))) : 0 ); \
+    #     (y>1? verosion+verosion2*(t-tcorr): -vtecto+verosion+verosion2*(t-tcorr))
+
   end
 end
 
 subsection Initial temperature model
   set List of model names = function
-#values for 30 km upper crust with 2e-6 productivity + X km LC with zero productivity
-# qbot=30e-3
-#A1= -4e-07 , B1= 0.036 , C1= 273.0 #A2= 0.0 , B2= 0.012 , C2= 633.0
-#values for 30 km upper crust with 2e-6 productivity + X km LC with zero productivity
-# qbot=20e-3
-#A1= -4e-07 , B1= 0.032 , C1= 273.0 #A2= 0.0 , B2= 0.008 , C2= 633.0
-#values for 35 km upper crust with 2e-6 productivity + X km LC with zero productivity
-# qbot=20e-3
-#A1= -4e-07 , B1= 0.036 , C1= 273.0 #A2= 0.0 , B2= 0.008 , C2= 763.0
-# 30 km , 1.5 productivity, qbot 20
-#A1= -3e-07 , B1= 0.026 , C1= 273.0 #A2= 0.0 , B2= 0.008 , C2= 543.0
-# 35 km crust, dtto
-#A1= -3e-07 , B1= 0.029 , C1= 273.0 #A2= 0.0 , B2= 0.008 , C2= 640.5
+#values for H1 m upper crust with R1 productivity + (H-H1) m LC with zero productivity & qbot
+#H= 80000.0 , H1= 35000.0 , q= -0.02 , R1= 1.7e-6:
+#A1= -3.4e-07 , B1= 0.0318 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 689.5
+#H= 80000.0 , H1= 35000.0 , qbot= -0.02 , R1= 1.5e-06 :
+#A1= -3e-07 , B1= 0.029 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 640.5
   subsection Function
-    #set Function constants = zLC=35e3, maxy=80e3, A1=-3e-07, B1=0.029, C1=273.0, A2= 0.0 , B2= 0.008, C2= 640.5
-    #set Function constants = zLC=35e3, maxy=80e3, A1=-4e-07, B1=0.036, C1=273.0, A2= 0.0 , B2= 0.008 , C2= 763.0
-    #set Function constants = zLC=35e3, maxy=80e3, A1=-3.4e-07, B1=0.0318, C1=273.0, A2= 0.0 , B2= 0.008, C2= 689.5
-    set Function constants = zLC=30e3, maxy=80e3, A1=-4e-07, B1=0.032, C1=273.0, A2= 0.0 , B2= 0.008 , C2= 633.0
-    #set Function constants = yLC=40e3, maxy=70e3, A1=-4e-07, B1=0.036, C1=273.0, A2= 0.0 , B2= 0.012 , C2= 633.0
+    set Function constants = zLC=35e3, maxy=80e3, A1= -3.4e-07 , B1= 0.0318 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 689.5
+    #set Function constants = zLC=35e3, maxy=80e3, A1= -3e-07 , B1= 0.029 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 640.5
     set Function expression = (y>(maxy-zLC) ? A1*(maxy-y)^2+B1*(maxy-y)+C1 :  A2*(maxy-y)^2+B2*(maxy-y)+C2)
   end
 end
@@ -145,8 +130,8 @@ subsection Heating model
   end
   subsection Composition melt heating
     set Reference composition = 0.7
-    set Heat production for reference composition = 2e-6 # W/m3, valid for cref
-    #set Heat production for reference composition = 1.5e-6 # W/m3, valid for cref
+    #set Heat production for reference composition = 2e-6 # W/m3, valid for cref
+    set Heat production for reference composition = 1.7e-6 # W/m3, valid for cref
   end
 end
 
@@ -168,7 +153,7 @@ subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      = x,y
-    set Function constants  = yLCt=30e3, c0=0.7, maxdepth=80e3, twidth=10e3, width=160e3, BCwidth=10e3
+    set Function constants  = yLCt=25e3, c0=0.7, maxdepth=80e3, twidth=10e3, width=160e3, BCwidth=10e3
     #set Function expression = 0; (y<(maxdepth-zLC) || y>80e3? 0.0 : c0) ; (y<yLC || y>80e3 ? 0.0 : c0)
     set Function expression = 0; \
      (x>BCwidth)&&(x<width-BCwidth) ?  ((y<yLCt) ? (y>yLCt-twidth ?  c0*( exp(-twidth/(y-yLCt+twidth))/ ( exp(-twidth/(y-yLCt+twidth)) + exp(-twidth/(twidth - (y-yLCt+twidth))))   ) : 0.0 ) : c0) : 0.0; \
@@ -178,7 +163,7 @@ end
 
 # Boundary conditions for composition
 subsection Boundary composition model
-  set Fixed composition boundary indicators = top, bottom, left, right
+  set Fixed composition boundary indicators = bottom, left, right # todo top boundary??
   set List of model names = initial composition
 end
 
@@ -211,10 +196,10 @@ subsection Material model
     set Jump in muscovite                         = 0.2
     set Temperature width of dehydration reaction = 10
 
-    set Reference solid composition               = 1.0
+    set Reference solid composition               = 0.7
     set Reference strainrate                      = 1e-14
     set Stress viscosity exponent                 = 2.4
-    set Reference shear viscosity                 = 2.27e8 #2.27e7
+    set Reference shear viscosity                 = 2.27e8
     set Activation energy                         = 156000.0
     set Exponential melt weakening factor         = 20.0
     set Exponential compositional strengthening factor = 4.6
@@ -240,7 +225,7 @@ end
 subsection Postprocess
   set List of postprocessors = visualization, temperature statistics, velocity statistics, composition statistics, particles, depth average
   subsection Visualization
-    set List of output variables      = material properties, heating, heat flux map,  melt material properties,  strain rate
+    set List of output variables      = material properties, heating, heat flux map,  strain rate,  melt material properties
     subsection Material properties
       set List of material properties = density, viscosity
     end
@@ -273,5 +258,6 @@ end
 subsection Checkpointing
   set Steps between checkpoint = 10
 end
+
 
 
