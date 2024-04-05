@@ -2,6 +2,12 @@ reset
 set terminal qt 0 font 'Calibri,12'
 #show terminal
 
+imax=20
+istep=10
+
+ParticlePlot=0 # true/false
+ParticlesLast=0 # true/false
+
 dfile='../outputs/d.txt'
 
 set multi 
@@ -37,8 +43,6 @@ LTP='lt 7'
 PTC='pt 6 lt 6 lw 2'
 LTC='lt 6'
 
-imax=10 #30
-
 # load particle files
 # particles: <x> <y> <id> <p> <T> <porosity> <peridotite> <peridotiteF> 
 file_name(n) = sprintf("../outputs/particles/particles-%05d.0000.gnuplots", n)
@@ -54,23 +58,18 @@ set origin 0,0
 set xrange [0:1200]
 set xlabel "temperature (C)"
 
-do for [iMyr = 0:imax:10] {
- p dfile u (($3)-K2C):(($2)*1e-3) every 1:1::iMyr::iMyr w l lt 4 lw 1
-}
 iMyr = 0
  p dfile u (($3)-K2C):(($2)*1e-3) every 1:1::iMyr::iMyr w l lt 0 lw 2
  iparticle=aparticle[iMyr+1]
- plot file_name(iMyr) u (($5)-K2C):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTT ps 1
-do for [iMyr = 10:imax:10] {
+ if (ParticlePlot) plot file_name(iMyr) u (($5)-K2C):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTT ps 1
+do for [iMyr = istep:imax:istep] {
  isize=iMyr/10
  p dfile u (($3)-K2C):(($2)*1e-3) every 1:1::iMyr::iMyr w l @LTT lw isize
  iparticle=aparticle[iMyr+1]
- plot file_name(iMyr) u (($5)-K2C):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTT ps isize
+ if (ParticlePlot) {plot file_name(iMyr) u (($5)-K2C):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTT ps isize}
 }
 iMyr=imax
-do for [iparticle = 0:100] {
- plot file_name(iMyr) u (($5)-K2C):((maxdepth-$2)*1e-3) w p
-}
+if (ParticlesLast) plot file_name(iMyr) u (($5)-K2C):((maxdepth-$2)*1e-3) w p
 
 ## POROSITY ################################
 
@@ -79,23 +78,18 @@ set xrange [-0.01:0.5]
 set xtics 0.1
 set xlabel "melt fraction"
 
-do for [iMyr = 0:imax:10] {
- p dfile u (($4)):(($2)*1e-3) every 1:1::iMyr::iMyr w l lt 4 lw 1
-}
 iMyr = 0
  p dfile u (($4)):(($2)*1e-3) every 1:1::iMyr::iMyr w l lt 0 lw 2
  iparticle=aparticle[iMyr+1]
- p file_name(iMyr) u ($6):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTP ps 1
-do for [iMyr = 10:imax:10] {
+ if (ParticlePlot) p file_name(iMyr) u ($6):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTP ps 1
+do for [iMyr = istep:imax:istep] {
  isize=iMyr/10
  p dfile u ($4):(($2)*1e-3) every 1:1::iMyr::iMyr w l @LTP lw isize
  iparticle=aparticle[iMyr+1]
- p file_name(iMyr) u ($6):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTP ps isize
+ if (ParticlePlot) {p file_name(iMyr) u ($6):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTP ps isize}
 }
 iMyr=imax
-do for [iparticle = 0:100] {
- p file_name(iMyr) u ($6):((maxdepth-$2)*1e-3) w lp
-}
+if (ParticlesLast) p file_name(iMyr) u ($6):((maxdepth-$2)*1e-3) w lp
 
 ## COMPOSITION ################################
 
@@ -104,23 +98,17 @@ set xrange [-0.01:1.5]
 set xtics 0.5
 set xlabel "composition"
 
-# this is not accurate...
-do for [iMyr = 0:imax:10] {
- p dfile u (($4*$6+(1.-$4)*$5)):(($2)*1e-3)  every 1:1::iMyr::iMyr w l lt 4 lw 1
-}
 iMyr = 0
  p dfile u (($4*$6+(1.-$4)*$5)):(($2)*1e-3)  every 1:1::iMyr::iMyr w l lt 0 lw 2
  iparticle=aparticle[iMyr+1]
- p file_name(iMyr) u (($6*$8+(1.-$6)*$7)):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTC ps 1
-do for [iMyr = 10:imax:10] {
+ if (ParticlePlot) p file_name(iMyr) u (($6*$8+(1.-$6)*$7)):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTC ps 1
+do for [iMyr = istep:imax:istep] {
  isize=iMyr/10
  p dfile u (($4*$6+(1.-$4)*$5)):(($2)*1e-3)  every 1:1::iMyr::iMyr w l @LTC lw isize
  iparticle=aparticle[iMyr+1]
- p file_name(iMyr) u (($6*$8+(1.-$6)*$7)):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTC ps isize
+ if (ParticlePlot) {p file_name(iMyr) u (($6*$8+(1.-$6)*$7)):((maxdepth-$2)*1e-3) every ::iparticle::iparticle w p @PTC ps isize}
 }
 iMyr=imax
-do for [iparticle = 0:100] {
- p file_name(iMyr) u (($6*$8+(1.-$6)*$7)):((maxdepth-$2)*1e-3) w p
-}
+if (ParticlesLast) p file_name(iMyr) u (($6*$8+(1.-$6)*$7)):((maxdepth-$2)*1e-3) w p
 
 unset multi
