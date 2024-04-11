@@ -4,11 +4,12 @@
 # Find source of oscillations in rhof=rhos case
 # Find source of composition leak
 # fix problem at top boundary - oscillations of composition and porosity
+# fix problem with adaptive remeshing and paralellization (update)
 
 set Additional shared libraries            = ./libmelt_petrol.so, ./libc_heating.so
 
 set Dimension                              = 2
-set Output directory                       = outputs/thermal-melt-petrol-chwide-bm-k8-r2-res05/
+set Output directory                       = outputs/thermal-melt-bm-k0-v/
 set Use years in output instead of seconds = true
 set Maximum time step                      = 1e5
 set Maximum time step                      = 5e5
@@ -32,7 +33,7 @@ subsection Solver parameters
 end
 
 subsection Melt settings
-  set Include melt transport = true #false
+  set Include melt transport = false #true
   set Heat advection by melt = true
   set Melt scaling factor threshold = 1.0
 end
@@ -45,9 +46,9 @@ end
 subsection Geometry model
   set Model name = box
    subsection Box
-     set X extent = 0.25e3 # 4e3 #0.125e3 #0.5e3 #2e3
+     set X extent = 1e3 # 4e3 #0.125e3 #0.5e3 #2e3
      set Y extent = 80e3
-     set Y repetitions = 320 #20 #640 #20 #640
+     set Y repetitions = 80 #20 #640 #20 #640
    end
 end
 
@@ -65,7 +66,7 @@ subsection Boundary velocity model
   set Prescribed velocity boundary indicators = bottom y:function, left x:function, right x:function
   subsection Function
    set Function constants = \
-     vtecto=0.002, verosion=0.001, maxdepth=80e3, width=0.25e3, \
+     vtecto=0.002, verosion=0.001, maxdepth=80e3, width=1e3, \
      channelbot=45e3, channelwidth=20e3, verosion2=0e-10, \
      vtecto2=-0.00, channelbot2=60e3, channelwidth2=10e3, tcorr=0e6
     # constant erosion:
@@ -80,21 +81,22 @@ subsection Boundary velocity model
     # erosion must be >= 0 at all times
      set Function expression = \
         ((y>channelbot-(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr) && \
-          y<channelbot+channelwidth) ? \
-        0.25*pi*width/(channelwidth+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))* \
+          y<channelbot+channelwidth-(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr) ) ? \
+        0.25*pi*width/(channelwidth)* \
         (x>1? -1 : 1)* \
         vtecto*sin(pi*(y-channelbot+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))/ \
-        (channelwidth+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))) : 0 ); \
+        (channelwidth)) : 0 ); \
         -vtecto+verosion+verosion2*(t-tcorr)
 
-    # set Function expression = \
-    #     ((y>channelbot-(vtecto-verosion+vtecto2)*(t-tcorr) && \
-    #       y<channelbot+channelwidth-(vtecto-verosion+vtecto2)*(t-tcorr) ) ? \
-    #     0.25*pi*width/(channelwidth)*(x>1? -1 : 1)*vtecto*sin(pi*(y-channelbot+(vtecto-verosion+vtecto2)*(t-tcorr))/(channelwidth)) : 0 ) \
-    #     + ((y>channelbot2 && \
-    #       y<channelbot2+channelwidth2 ) ? \
-    #     0.25*pi*width/(channelwidth2)*(x>1? -1 : 1)*vtecto2*sin(pi*(y-channelbot2)/(channelwidth2)) : 0 ) \
-    #     ; -vtecto+verosion-vtecto2
+      #  set Function expression = \
+      #   ((y>channelbot-(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr) && \
+      #     y<channelbot+channelwidth) ? \
+      #   0.25*pi*width/(channelwidth+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))* \
+      #   (x>1? -1 : 1)* \
+      #   vtecto*sin(pi*(y-channelbot+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))/ \
+      #   (channelwidth+(vtecto-verosion-0.5*verosion2*(t-tcorr))*(t-tcorr))) : 0 ); \
+      #   -vtecto+verosion+verosion2*(t-tcorr)
+
   end
 end
 
@@ -106,11 +108,8 @@ subsection Initial temperature model
 #H= 80000.0 , H1= 35000.0 , qbot= -0.02 , R1= 1.5e-06 :
 #A1= -3e-07 , B1= 0.029 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 640.5
   subsection Function
-    #set Function constants = zLC=35e3, maxy=80e3, A1= -3.4e-07 , B1= 0.0318 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 689.5
-    set Function constants = zLC=35e3, maxy=80e3, A1= -3e-07 , B1= 0.029 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 640.5
-    #set Function constants = zLC=35e3, maxy=80e3, A1=-4e-07, B1=0.036, C1=273.0, A2= 0.0 , B2= 0.008 , C2= 763.0
-    #set Function constants = yLC=40e3, maxy=70e3, A1=-4e-07, B1=0.032, C1=273.0, A2= 0.0 , B2= 0.008 , C2= 633.0
-    #set Function constants = yLC=40e3, maxy=70e3, A1=-4e-07, B1=0.036, C1=273.0, A2= 0.0 , B2= 0.012 , C2= 633.0
+    set Function constants = zLC=35e3, maxy=80e3, A1= -3.4e-07 , B1= 0.0318 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 689.5
+    #set Function constants = zLC=35e3, maxy=80e3, A1= -3e-07 , B1= 0.029 , C1= 273.0 , A2= 0.0 , B2= 0.008 , C2= 640.5
     set Function expression = (y>(maxy-zLC) ? A1*(maxy-y)^2+B1*(maxy-y)+C1 :  A2*(maxy-y)^2+B2*(maxy-y)+C2)
   end
 end
@@ -137,9 +136,8 @@ subsection Heating model
     set Melting entropy change = -300.0
   end
   subsection Composition melt heating
-    set Reference composition = 0.7
-    set Heat production for reference composition = 2e-6 # W/m3, valid for cref
-    #set Heat production for reference composition = 1.5e-6 # W/m3, valid for cref
+    set Reference composition = 0.8
+    set Heat production for reference composition = 1.7e-6 # W/m3, valid for cref
   end
 end
 
@@ -151,7 +149,7 @@ end
 subsection Compositional fields
   set Number of fields            = 3
   set Names of fields             = porosity, peridotite, peridotiteF
-  set Compositional field methods = field, field, melt field
+  set Compositional field methods = field, field, field # melt field #melt field
 end
 
 # Initial porosity is zero.
@@ -161,7 +159,7 @@ subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      = x,y
-    set Function constants  = yLCt=50e3, maxdepth=80e3, twidth=10e3, c0=0.7
+    set Function constants  = yLCt=50e3, maxdepth=80e3, twidth=10e3, c0=0.8
     #set Function expression = 0; (y<(maxdepth-zLC) || y>80e3? 0.0 : c0) ; (y<yLC || y>80e3 ? 0.0 : c0)
     set Function expression = 0; \
      ((y<yLCt) ? (y>yLCt-twidth ?  c0*( exp(-twidth/(y-yLCt+twidth))/ ( exp(-twidth/(y-yLCt+twidth)) + exp(-twidth/(twidth - (y-yLCt+twidth))))   ) : 0.0 ) : c0) ; \
@@ -197,7 +195,7 @@ subsection Material model
     set Thermal expansion coefficient             = 0e-5
     set Composition density change                = 200.0
 
-    set Reference permeability                    = 1e-8
+    set Reference permeability                    = 1e-7
     set Reference melt viscosity                  = 1e4 # overwritten in .cc file
 
     set Water in biotite                          = 0.5
@@ -205,7 +203,7 @@ subsection Material model
     set Jump in muscovite                         = 0.2
     set Temperature width of dehydration reaction = 10
 
-    set Reference solid composition               = 0.7
+    set Reference solid composition               = 0.8
     set Reference strainrate                      = 1e-14
     set Stress viscosity exponent                 = 2.4
     set Reference shear viscosity                 = 2.27e8
@@ -259,6 +257,7 @@ end
 subsection Checkpointing
   set Steps between checkpoint = 10
 end
+
 
 
 
