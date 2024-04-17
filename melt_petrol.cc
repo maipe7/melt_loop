@@ -151,7 +151,7 @@ namespace aspect
 
     template <int dim>
     void
-    MeltPetrol<dim>::update()
+    MeltPetrol<dim>::update() // TODO WRONG IN CASE OF REMESHING AND PARALLELIZATION - MOVE BACK TO EVALUATE
     {
       const QTrapez<dim> quadrature_formula;
       const unsigned int n_q_points = quadrature_formula.size(); // TODO or fe_values.n_quadrature_points?
@@ -161,6 +161,7 @@ namespace aspect
       MaterialModel::MaterialModelOutputs<dim> out(n_q_points, this->n_compositional_fields());
 
       max_depth = 0.0;
+      double max_depth_partition = 0.0;
       for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned())
         { // the cell is owned by the current processor
@@ -169,9 +170,11 @@ namespace aspect
           this->get_material_model().evaluate(in, out);
           for (unsigned int i = 0; i < in.n_evaluation_points(); ++i)
           {
-            max_depth = std::max(max_depth, in.position[i][1]);
+            max_depth_partition = std::max(max_depth_partition, in.position[i][1]);
           }
         }
+      max_depth = Utilities::MPI::max(max_depth_partition, this->get_mpi_communicator());
+      //std::cout << max_depth << " " << max_depth_partition << "\n";
     }
 
     template <int dim>
@@ -259,7 +262,7 @@ namespace aspect
             edot_ii = std::max(std::sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))), epsdot_0);
           out.viscosities[i] *= std::pow(edot_ii, ((1.0 - stress_exponent) / stress_exponent));
           // total value of shear viscosity is cropped to min and max values
-          out.viscosities[i] = std::min(std::max(out.viscosities[i], 1e16), 1e23);
+          out.viscosities[i] = std::min(std::max(out.viscosities[i], 1e17), 1e23); // TODO modif 1e16
         }
 
         // Fill in melt material properties:
