@@ -354,17 +354,19 @@ namespace aspect
                       if (PTfield > 0)
                         reaction_rate_out->reaction_rates[i][c] =
                             porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
-                      else
+                      else // below wet solidus
                         reaction_rate_out->reaction_rates[i][c] =
                             (c_tot_old - old_peridotite[i]) / melting_time_scale;
                     else if (c == peridotiteF_idx)
                       if (PTfield > 0)
                         reaction_rate_out->reaction_rates[i][c] =
-                            porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; //
-                      else
+                            //porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; //
+                            (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition // TODO which one is correct?
+                      else // below wet solidus
                       {
                         reaction_rate_out->reaction_rates[i][c] =
-                            (c_tot_old - old_peridotite[i]) / melting_time_scale;
+                            //(c_tot_old - old_peridotite[i]) / melting_time_scale;
+                            (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition
                       }
                     else if (c == porosity_idx)
                       reaction_rate_out->reaction_rates[i][c] =
@@ -394,11 +396,12 @@ namespace aspect
                   else // if ( c_tot_old > c_f) // temperature (composition) above liquidus - equilibrium porosity is 1
                   {    // TODO porosity-old_porosity?
                     if (c == peridotite_idx)
-                      reaction_rate_out->reaction_rates[i][c] =
-                          (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale;
+                      reaction_rate_out->reaction_rates[i][c] = 
+                          (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; // may produce negative cs if we start out of equilibrium
                     else if (c == peridotiteF_idx)
                       reaction_rate_out->reaction_rates[i][c] =
-                          (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; //
+                          //(1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; //
+                          (c_tot_old - old_peridotiteF[i]) / melting_time_scale; // adjust to bulk composition
                     else if (c == porosity_idx)
                       reaction_rate_out->reaction_rates[i][c] =
                           (1.0 - old_porosity[i]) / melting_time_scale;
