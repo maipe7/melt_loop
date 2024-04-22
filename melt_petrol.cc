@@ -66,6 +66,7 @@ namespace aspect
     MeltPetrol<dim>::
         melt_fractions(const MaterialModel::MaterialModelInputs<dim> &in,
                        std::vector<double> &melt_fractions) const
+    // filled with zeroes - to be removed??
     {
       for (unsigned int q = 0; q < in.n_evaluation_points(); ++q)
       {
@@ -98,37 +99,54 @@ namespace aspect
       const double pressure0=1e9; // reference pressure for phase diagram construction
       //const double wSat = wBt + wMu0 + wMu1;
 
+      // wet solidus temperature:
+      double Twetsolid = fTwetsolid(pressure);
+      // wet solidus temperature at reference pressure:
+      double TwetsolidP0 = fTwetsolid(pressure0);
+
+      // liquidus curve - fit to data in Makhluf et al., 2017 (Johannes, Holtz):
+      // wliquidus(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
       const double c = 600. + 273.;
       const double aG = 19e-9;
       const double b = 29.;
       const double d = 360.;
       const double eG = 205e-9;
       const double f = 0.13;
-
-      double Twetsolid = fTwetsolid(pressure);
-      double TwetsolidP0 = fTwetsolid(pressure0);
-      // wliquidus(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
-      double cliquidus = (aG * pressure + b) * (1 - std::pow((std::max(Twetsolid, temperature) - c) / (d + eG * pressure), f));
-      double Tdrysolid = c + d + eG * pressure; // dry solidus==dry liquidus - curves cross there
-      double wmax = (aG * pressure + b) * (1 - std::pow((Twetsolid - DT - c) / (d + eG * pressure), f)); // composition at wet solidus - DT
+      double wliquidus = (aG * pressure + b) * (1 - std::pow((std::max(Twetsolid, temperature) - c) / (d + eG * pressure), f));
+      // solidus temperature for c=0; dry solidus==dry liquidus - curves cross there:
+      double Tdrysolid = c + d + eG * pressure; 
+      // liquid composition at temperature = wet solidus - DT; curves cross there:
+      double wmax = (aG * pressure + b) * (1 - std::pow((Twetsolid - DT - c) / (d + eG * pressure), f)); 
+      
+      // temperature of muscovite dehydration reaction:
       double Tmus = fTmus(pressure);
+      // temperature of muscovite dehydration reaction at reference pressure:
       double Tmus0= fTmus(pressure0);
 
-      //double wlin0 = (wBt) * (temperature - Tdrysolid) / (Tmus - Tdrysolid); // fixed wBt point for all pressures
-      double wlin0     = (wBt) * (temperature - Tdrysolid) / (Tmus0 - Tdrysolid);  // crossing same reference point - preferred
-      double wlin0Tmus = (wBt) * (Tmus - Tdrysolid) /        (Tmus0 - Tdrysolid);  //
-      //double wlin1 = (wBt + wMu0) + (wMu1) * (temperature - Tmus) / (Twetsolid - Tmus); // fixed wMus point
-      double wlin1          = (wlin0Tmus + wMu0) + (wMu1) * (temperature - Tmus) / (TwetsolidP0 - Tmus0); // fixed wMu0 (jump in muscovite), fixed slope - preferred
-      double wlin1Twetsolid = (wlin0Tmus + wMu0) + (wMu1) * (Twetsolid - Tmus) / (TwetsolidP0 - Tmus0); // fixed wMu0 (jump in muscovite), fixed slope - preferred
-      double csolidus = (temperature > Twetsolid - DT ? 
-                  (temperature > Twetsolid ? 
-                   (temperature > Tmus - DT ? 
-                    (temperature > Tmus ? 
-                    wlin0 : 
-                    wlin0Tmus + wMu0 * (Tmus - temperature) / DT) : 
-                   wlin1) : 
-                  wlin1Twetsolid + (wmax - wlin1Twetsolid) * ((Twetsolid - temperature) / DT)) 
-                 : cliquidus);
+      // Construction of the solidus composition, a piecewise-linear function of temperature :
+      // 1. linear between c=0 and c=wlin0Tmus:
+      double wlin1     = (wBt) * (temperature - Tdrysolid) / (Tmus0 - Tdrysolid);  // crossing same reference point - preferred
+      double wlin1Tmus = (wBt) * (Tmus - Tdrysolid) /        (Tmus0 - Tdrysolid);  // endpoint of the first linear part
+      //double wlin1 = (wBt) * (temperature - Tdrysolid) / (Tmus - Tdrysolid); // fixed wBt point for all pressures
+      // 2. linear between c=wlin1Tmus and c=wlin1Tmus+wMu0:
+      double wlin2 = wlin1Tmus + wMu0 * (Tmus - temperature) / DT;
+      // 3. linear between c=wlin1Tmus+wMu0 and c=wlin2Twetsolid:
+      double wlin3          = (wlin1Tmus + wMu0) + (wMu1) * (temperature - Tmus) / (TwetsolidP0 - Tmus0); // fixed wMu0 (jump in muscovite), fixed slope - preferred
+      double wlin3Twetsolid = (wlin1Tmus + wMu0) + (wMu1) * (Twetsolid - Tmus) / (TwetsolidP0 - Tmus0); // endpoint of the third linear part
+      //double wlin3 = (wBt + wMu0) + (wMu1) * (temperature - Tmus) / (Twetsolid - Tmus); // fixed wMus point
+      // 4. linear between wlin2Twetsolid and wmax:
+      double wlin4 = wlin3Twetsolid + (wmax - wlin3Twetsolid) * ((Twetsolid - temperature) / DT);
+      double wsolidus = 
+       (temperature > Twetsolid - DT ? 
+        (temperature > Twetsolid ? 
+         (temperature > Tmus - DT ? 
+          (temperature > Tmus ? 
+            wlin1 : 
+           wlin2) : 
+          wlin3) : 
+         wlin4) 
+        : wliquidus);
+      
       if (temperature >= Tdrysolid) // above liquidus for all c
       {
         c_s = 0.0;
@@ -137,21 +155,23 @@ namespace aspect
       }
       else if (temperature < Twetsolid - DT) // below solidus for all c
       {
-        c_s = cliquidus; // is the same as csolidus
-        c_f = cliquidus;
+        c_s = wliquidus; // is the same as wsolidus
+        c_f = wliquidus;
         PTfield = 0;
       }
       else
       {
-        c_s = csolidus;
-        c_f = cliquidus;
+        c_s = wsolidus;
+        c_f = wliquidus;
         PTfield = 1;
       }
     }
 
     template <int dim>
     void
-    MeltPetrol<dim>::update() // TODO WRONG IN CASE OF REMESHING AND PARALLELIZATION - MOVE BACK TO EVALUATE
+    MeltPetrol<dim>::update()
+    // calculate maximum depth of the domain to be used in lithostatic pressure computation
+    // TODO check if this->get_geometry_model().maximal_depth() does the job...
     {
       const QTrapez<dim> quadrature_formula;
       const unsigned int n_q_points = quadrature_formula.size(); // TODO or fe_values.n_quadrature_points?
@@ -174,7 +194,7 @@ namespace aspect
           }
         }
       max_depth = Utilities::MPI::max(max_depth_partition, this->get_mpi_communicator());
-      //std::cout << max_depth << " " << max_depth_partition << "\n";
+      std::cout << this->get_geometry_model().maximal_depth() << max_depth_partition;
     }
 
     template <int dim>
@@ -199,7 +219,7 @@ namespace aspect
                                                                std::max(this->get_parameters().reaction_steps_per_advection_step, 1U));
         dtt = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
       }
-      // Prepare gravity for calculation of lithostatic pressure: - move to update()
+      // Prepare gravity for calculation of lithostatic pressure: - move to update()?
       const double reference_depth = 0.0;
       const Point<dim> representative_point = this->get_geometry_model().representative_point(reference_depth);
       const double reference_gravity = this->get_gravity_model().gravity_vector(representative_point).norm();
@@ -296,7 +316,7 @@ namespace aspect
              eta(T,W)=10.0**LogEta(T,W) */
             double eta_f_Schulze = std::pow(10.0, -2.5726 + (448.03 - 252.12 * std::pow(waterWtPc, 0.11)) * 1e3 / (2.303 * 8.31) * invtemperature);
             // double eta_f_Scaillet = std::pow(10.0, -7.5461 + 16280.*invtemperature + (0.59784-1235.4*invtemperature)*waterWtPc); // too low?!
-            melt_out->fluid_viscosities[i] = std::max(std::min(eta_f_Schulze, 1e7), 1e2);
+            melt_out->fluid_viscosities[i] = std::max(std::min(eta_f_Schulze, 1e7), 1e2); // TODO test without cropping
           }
 
           // Calculate melt density:
@@ -351,23 +371,21 @@ namespace aspect
                   if (c_tot_old < c_s) //... below solidus - equilibrium porosity is 0
                   {
                     if (c == peridotite_idx)
-                      if (PTfield > 0)
+                      if (PTfield > 0) // TODO rethink usage of PTfield
                         reaction_rate_out->reaction_rates[i][c] =
                             porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
-                      else // below wet solidus
+                      else // below wet solidus - solid composition tends to bulk composition
                         reaction_rate_out->reaction_rates[i][c] =
                             (c_tot_old - old_peridotite[i]) / melting_time_scale;
                     else if (c == peridotiteF_idx)
-                      if (PTfield > 0)
+                      if (PTfield > 0) // TODO rethink usage of PTfield
                         reaction_rate_out->reaction_rates[i][c] =
                             //porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; //
                             (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition // TODO which one is correct?
-                      else // below wet solidus
-                      {
+                      else // below wet solidus - liquid composition arbitrary, tends to liquidus composition
                         reaction_rate_out->reaction_rates[i][c] =
                             //(c_tot_old - old_peridotite[i]) / melting_time_scale;
                             (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition
-                      }
                     else if (c == porosity_idx)
                       reaction_rate_out->reaction_rates[i][c] =
                           -old_porosity[i] / melting_time_scale;
@@ -401,7 +419,7 @@ namespace aspect
                     else if (c == peridotiteF_idx)
                       reaction_rate_out->reaction_rates[i][c] =
                           //(1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; //
-                          (c_tot_old - old_peridotiteF[i]) / melting_time_scale; // adjust to bulk composition
+                          (c_tot_old - old_peridotiteF[i]) / melting_time_scale; // adjust liquid composition to bulk composition
                     else if (c == porosity_idx)
                       reaction_rate_out->reaction_rates[i][c] =
                           (1.0 - old_porosity[i]) / melting_time_scale;
@@ -666,8 +684,8 @@ namespace aspect
     ASPECT_REGISTER_MATERIAL_MODEL(MeltPetrol,
                                    "melt petrol",
                                    "A material model for the modeling of melt transport. "
-                                   "It includes a simplified melting parametrization with "
-                                   "linear solidus and liquidus temperatures, "
+                                   "It includes a simple melting parametrization with "
+                                   "piecewise-linear solidus and experiment-based liquidus temperatures, "
                                    "and equilibrium melt fraction calculated by the lever rule.")
   }
 }
