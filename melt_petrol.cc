@@ -96,12 +96,11 @@ namespace aspect
              const double pressure, double &c_s, double &c_f, int &PTfield) const
     {
       const double pressure0 = 1e9; // reference pressure for phase diagram construction
-      // const double wSat = wBt + wMu0 + wMu1;
 
+      // temperature of muscovite dehydration reaction:
+      double Tmus = fTmus(pressure);
       // wet solidus temperature:
       double Twetsolid = fTwetsolid(pressure);
-      // wet solidus temperature at reference pressure:
-      double TwetsolidP0 = fTwetsolid(pressure0);
 
       // liquidus curve - fit to data in Makhluf et al., 2017 (Johannes, Holtz):
       // wliquidus(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
@@ -117,28 +116,34 @@ namespace aspect
       // liquid composition at temperature = wet solidus - DT; curves cross there:
       double wmax = (aG * pressure + b) * (1 - std::pow((Twetsolid - DT - c) / (d + eG * pressure), f));
 
-      // temperature of muscovite dehydration reaction:
-      double Tmus = fTmus(pressure);
-      // temperature of muscovite dehydration reaction at reference pressure:
-      double Tmus0 = fTmus(pressure0);
-
-      // Construction of the solidus composition, a piecewise-linear function of temperature :
-      // 1. linear between c=0 and c=wlin0Tmus:
-      double wlin1 = (wBt) * (temperature - Tdrysolid) / (Tmus0 - Tdrysolid); // crossing same reference point - preferred
-      double wlin1Tmus = (wBt) * (Tmus - Tdrysolid) / (Tmus0 - Tdrysolid);    // endpoint of the first linear part
-      // double wlin1 = (wBt) * (temperature - Tdrysolid) / (Tmus - Tdrysolid); // fixed wBt point for all pressures
-      //  2. linear between c=wlin1Tmus and c=wlin1Tmus+wMu0:
-      double wlin2 = wlin1Tmus + wMu0 * (Tmus - temperature) / DT;
-      // 3. linear between c=wlin1Tmus+wMu0 and c=wlin2Twetsolid:
-      double wlin3 = (wlin1Tmus + wMu0) + (wMu1) * (temperature - Tmus) / (TwetsolidP0 - Tmus0);        // fixed wMu0 (jump in muscovite), fixed slope - preferred
-      double wlin3Twetsolid = (wlin1Tmus + wMu0) + (wMu1) * (Twetsolid - Tmus) / (TwetsolidP0 - Tmus0); // endpoint of the third linear part
-      // double wlin3 = (wBt + wMu0) + (wMu1) * (temperature - Tmus) / (Twetsolid - Tmus); // fixed wMus point
-      //  4. linear between wlin2Twetsolid and wmax:
-      double wlin4 = wlin3Twetsolid + (wmax - wlin3Twetsolid) * ((Twetsolid - temperature) / DT);
+      // Construction of the solidus composition, a piecewise-linear function of temperature
+      double wlin1, wlin2, wlin3, wlin4;
+      if (true) // fixed wBt, wMu0, wMu1 points for all pressures
+      {          // todo clean and check
+        wlin1 = wBt * (temperature - Tdrysolid) / (Tmus - Tdrysolid);
+        wlin2 = wBt + wMu0 * (Tmus - temperature) / DT;
+        wlin3 = wBt + wMu0 + wMu1 * (temperature - Tmus) / (Twetsolid - Tmus);
+        wlin4 = wBt + wMu0 + wMu1 + (wmax - (wBt + wMu0 + wMu1)) * ((Twetsolid - temperature) / DT);
+      }
+      else // more detailed construction with pressure dependent biotite content and other features:
+      {
+        // 1. linear between c=0 and c=wlin0Tmus:
+        double Tmus0 = fTmus(pressure0); // temperature of muscovite dehydration reaction at reference pressure
+        wlin1 = wBt * (temperature - Tdrysolid) / (Tmus0 - Tdrysolid);     // crossing same reference point - preferred
+        //  2. linear between c=wlin1Tmus and c=wlin1Tmus+wMu0:
+        double wlin1Tmus = wBt * (Tmus - Tdrysolid) / (Tmus0 - Tdrysolid); // endpoint of the first linear part
+        wlin2 = wlin1Tmus + wMu0 * (Tmus - temperature) / DT;
+        // 3. linear between c=wlin1Tmus+wMu0 and c=wlin2Twetsolid:
+        double TwetsolidP0 = fTwetsolid(pressure0); // wet solidus temperature at reference pressure:
+        wlin3 = (wlin1Tmus + wMu0) + (wMu1) * (temperature - Tmus) / (TwetsolidP0 - Tmus0);               // fixed wMu0 (jump in muscovite), fixed slope - preferred
+        //  4. linear between wlin3Twetsolid and wmax:
+        double wlin3Twetsolid = (wlin1Tmus + wMu0) + (wMu1) * (Twetsolid - Tmus) / (TwetsolidP0 - Tmus0); // endpoint of the third linear part
+        wlin4 = wlin3Twetsolid + (wmax - wlin3Twetsolid) * ((Twetsolid - temperature) / DT);
+      }
       double wsolidus =
           (temperature > Twetsolid - DT ? (temperature > Twetsolid ? (temperature > Tmus - DT ? (temperature > Tmus ? wlin1 : wlin2) : wlin3) : wlin4)
                                         : wliquidus);
-
+      // fill in the output variables:
       if (temperature >= Tdrysolid) // above liquidus for all c
       {
         c_s = 0.0;
@@ -368,11 +373,11 @@ namespace aspect
                       reaction_rate_out->reaction_rates[i][c] =
                           (c_tot_old - old_peridotite[i]) / melting_time_scale;
                   else if (c == peridotiteF_idx)
-                    if (PTfield > 0 ) //|| porosity > 1e-3) // TODO rethink usage of PTfield, TODO epsilon
+                    if (PTfield > 0) //|| porosity > 1e-3) // TODO rethink usage of PTfield, TODO epsilon
                       reaction_rate_out->reaction_rates[i][c] =
-                         //porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; //
-                            (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition // TODO which one is correct? Why??
-                    else                                                                            // below wet solidus - liquid composition arbitrary, artificially adjusted to liquidus composition
+                          // porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; //
+                          (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition // TODO which one is correct? Why??
+                    else                                                   // below wet solidus - liquid composition arbitrary, artificially adjusted to liquidus composition
                       reaction_rate_out->reaction_rates[i][c] =
                           (c_f - old_peridotiteF[i]) / melting_time_scale;
                   else
