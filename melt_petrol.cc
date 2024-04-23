@@ -17,7 +17,6 @@
     You should have received a copy of the GNU General Public License
     along with ASPECT; see the file LICENSE.  If not, see
     <https://www.gnu.org/licenses/>.
-
 */
 
 #include "melt_petrol.h"
@@ -75,20 +74,20 @@ namespace aspect
     }
 
     inline double fTwetsolid(double pressure)
-    // pressure-dependent wet solidus temperature (Holtz 2001) combined with ???; 
+    // pressure-dependent wet solidus temperature (Holtz 2001) combined with ???;
     // works above 0.1 GPa
     // pressure in Pa
-      { return (pressure < 1e9 ? 
-                        640. + 273. + 150. * std::pow(pressure * 1e-9 - 1., 4.) / 1. : 
-                        640. + 273. +  50. * std::pow(pressure * 1e-9 - 1., 2.) / 1.); 
-      }
+    {
+      return (pressure < 1e9 ? 640. + 273. + 150. * std::pow(pressure * 1e-9 - 1., 4.) / 1. : 640. + 273. + 50. * std::pow(pressure * 1e-9 - 1., 2.) / 1.);
+    }
 
     inline double fTmus(double pressure)
-    // muscovite dehydration line according to Thermocalc; 
+    // muscovite dehydration line according to Thermocalc;
     // experiments put it higher (Patino Douce and Harris, 1998)
     // pressure in Pa
-      { return 620.0 + 273. + 130. * pressure * 1e-9;                  
-      }
+    {
+      return 620.0 + 273. + 130. * pressure * 1e-9;
+    }
 
     template <int dim>
     void
@@ -96,8 +95,8 @@ namespace aspect
         c_sf(const double temperature,
              const double pressure, double &c_s, double &c_f, int &PTfield) const
     {
-      const double pressure0=1e9; // reference pressure for phase diagram construction
-      //const double wSat = wBt + wMu0 + wMu1;
+      const double pressure0 = 1e9; // reference pressure for phase diagram construction
+      // const double wSat = wBt + wMu0 + wMu1;
 
       // wet solidus temperature:
       double Twetsolid = fTwetsolid(pressure);
@@ -114,39 +113,32 @@ namespace aspect
       const double f = 0.13;
       double wliquidus = (aG * pressure + b) * (1 - std::pow((std::max(Twetsolid, temperature) - c) / (d + eG * pressure), f));
       // solidus temperature for c=0; dry solidus==dry liquidus - curves cross there:
-      double Tdrysolid = c + d + eG * pressure; 
+      double Tdrysolid = c + d + eG * pressure;
       // liquid composition at temperature = wet solidus - DT; curves cross there:
-      double wmax = (aG * pressure + b) * (1 - std::pow((Twetsolid - DT - c) / (d + eG * pressure), f)); 
-      
+      double wmax = (aG * pressure + b) * (1 - std::pow((Twetsolid - DT - c) / (d + eG * pressure), f));
+
       // temperature of muscovite dehydration reaction:
       double Tmus = fTmus(pressure);
       // temperature of muscovite dehydration reaction at reference pressure:
-      double Tmus0= fTmus(pressure0);
+      double Tmus0 = fTmus(pressure0);
 
       // Construction of the solidus composition, a piecewise-linear function of temperature :
       // 1. linear between c=0 and c=wlin0Tmus:
-      double wlin1     = (wBt) * (temperature - Tdrysolid) / (Tmus0 - Tdrysolid);  // crossing same reference point - preferred
-      double wlin1Tmus = (wBt) * (Tmus - Tdrysolid) /        (Tmus0 - Tdrysolid);  // endpoint of the first linear part
-      //double wlin1 = (wBt) * (temperature - Tdrysolid) / (Tmus - Tdrysolid); // fixed wBt point for all pressures
-      // 2. linear between c=wlin1Tmus and c=wlin1Tmus+wMu0:
+      double wlin1 = (wBt) * (temperature - Tdrysolid) / (Tmus0 - Tdrysolid); // crossing same reference point - preferred
+      double wlin1Tmus = (wBt) * (Tmus - Tdrysolid) / (Tmus0 - Tdrysolid);    // endpoint of the first linear part
+      // double wlin1 = (wBt) * (temperature - Tdrysolid) / (Tmus - Tdrysolid); // fixed wBt point for all pressures
+      //  2. linear between c=wlin1Tmus and c=wlin1Tmus+wMu0:
       double wlin2 = wlin1Tmus + wMu0 * (Tmus - temperature) / DT;
       // 3. linear between c=wlin1Tmus+wMu0 and c=wlin2Twetsolid:
-      double wlin3          = (wlin1Tmus + wMu0) + (wMu1) * (temperature - Tmus) / (TwetsolidP0 - Tmus0); // fixed wMu0 (jump in muscovite), fixed slope - preferred
+      double wlin3 = (wlin1Tmus + wMu0) + (wMu1) * (temperature - Tmus) / (TwetsolidP0 - Tmus0);        // fixed wMu0 (jump in muscovite), fixed slope - preferred
       double wlin3Twetsolid = (wlin1Tmus + wMu0) + (wMu1) * (Twetsolid - Tmus) / (TwetsolidP0 - Tmus0); // endpoint of the third linear part
-      //double wlin3 = (wBt + wMu0) + (wMu1) * (temperature - Tmus) / (Twetsolid - Tmus); // fixed wMus point
-      // 4. linear between wlin2Twetsolid and wmax:
+      // double wlin3 = (wBt + wMu0) + (wMu1) * (temperature - Tmus) / (Twetsolid - Tmus); // fixed wMus point
+      //  4. linear between wlin2Twetsolid and wmax:
       double wlin4 = wlin3Twetsolid + (wmax - wlin3Twetsolid) * ((Twetsolid - temperature) / DT);
-      double wsolidus = 
-       (temperature > Twetsolid - DT ? 
-        (temperature > Twetsolid ? 
-         (temperature > Tmus - DT ? 
-          (temperature > Tmus ? 
-            wlin1 : 
-           wlin2) : 
-          wlin3) : 
-         wlin4) 
-        : wliquidus);
-      
+      double wsolidus =
+          (temperature > Twetsolid - DT ? (temperature > Twetsolid ? (temperature > Tmus - DT ? (temperature > Tmus ? wlin1 : wlin2) : wlin3) : wlin4)
+                                        : wliquidus);
+
       if (temperature >= Tdrysolid) // above liquidus for all c
       {
         c_s = 0.0;
@@ -251,13 +243,15 @@ namespace aspect
                  ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                             "not filled by the caller."));
           // viscosity reduction due to porosity:
-          //out.viscosities[i] *= std::max(exp(-alpha_phi * porosity), 1e-4); // ref
-          //out.viscosities[i] *= exp(-alpha_phi * porosity); // exp
-          double A=0.05; double width=0.26; // coke // fits Costa/Keller well for 5 orders of magnitude decrease
-          out.viscosities[i] *=  exp(-alpha_phi * porosity)*((porosity>A) ? (porosity<A+width ? 
-           ( std::exp(-width/(-porosity+A+width))/ 
-           (std::exp(-width/(-porosity+A+width)) + std::exp(-width/(width -(-porosity+A+width))))   ) : 0.0 ) : 1.0);
-          
+          // out.viscosities[i] *= std::max(exp(-alpha_phi * porosity), 1e-4); // ref
+          // out.viscosities[i] *= exp(-alpha_phi * porosity); // exp
+          double A = 0.05;
+          double width = 0.26; // coke // fits Costa/Keller well for 5 orders of magnitude decrease
+          out.viscosities[i] *= exp(-alpha_phi * porosity) * ((porosity > A) ? (porosity < A + width ? (std::exp(-width / (-porosity + A + width)) /
+                                                                                                        (std::exp(-width / (-porosity + A + width)) + std::exp(-width / (width - (-porosity + A + width)))))
+                                                                                                     : 0.0)
+                                                                             : 1.0);
+
           // normalized solid composition:
           const double C_solid_normalized = (old_peridotite[i] - C_reference);
           // const double C_solid_normalized = std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus));
@@ -292,22 +286,17 @@ namespace aspect
           melt_out->fluid_density_gradients[i] = Tensor<1, dim>(); // not calculated
 
           melt_out->fluid_viscosities[i] = eta_f;
-          double waterWtPc;
-          if (1 == 1)
+          if (!use_constant_eta_f)
           {
-            waterWtPc = std::max(0.1, old_peridotiteF[i]);
-          }
-          else if (0 == 1)
-          {
-            /*function to fit temperature dependence of data (Holz 01, Fig. 4):
-            A=174.; B=-0.015; T0=16.6; P0=8.; dWdP=0.25; Tinfty=500.
-            Wfluid(T,P)=A/(T-Tinfty)+B*T+T0+(P-P0)*dWdP*/
-            const double temperatureReduced = std::max(in.temperature[i], 823.);
-            waterWtPc = 174. / (temperatureReduced - 773.) - 0.015 * (temperatureReduced - 273.) + 16.6 + (in.pressure[i] / 1e8 - 8.) * 0.25;
-          }
-          double thermal_fluid_viscosity_exponent = 1.; // TODO change input parames in prm file
-          if (thermal_fluid_viscosity_exponent > 0.0) // if visc exponent <== 0 then constant viscosity
-          {
+            double waterWtPc = std::max(0.1, old_peridotiteF[i]);
+            if (false) //
+            {
+              /*function to fit temperature dependence of data (Holz 01, Fig. 4):
+              A=174.; B=-0.015; T0=16.6; P0=8.; dWdP=0.25; Tinfty=500.
+              Wfluid(T,P)=A/(T-Tinfty)+B*T+T0+(P-P0)*dWdP*/
+              const double temperatureReduced = std::max(in.temperature[i], 823.);
+              waterWtPc = 174. / (temperatureReduced - 773.) - 0.015 * (temperatureReduced - 273.) + 16.6 + (in.pressure[i] / 1e8 - 8.) * 0.25;
+            }
             const double invtemperature = 1.0 / std::max(in.temperature[i], 1.0);
             /* viscosity according to Schulze etal 1995:
              LogEta0=-2.5726 #-1.5726 for equation in Poise
@@ -327,9 +316,9 @@ namespace aspect
           melt_out->fluid_densities[i] = (reference_rho_f + delta_rho) * temperature_dependence;
           // compaction viscosity defined relatively to shear viscosity
           melt_out->compaction_viscosities[i] = out.viscosities[i] * (2.0 + 0.3 / std::max(porosity, 3e-4)); // ref
-          //melt_out->compaction_viscosities[i] = out.viscosities[i] / (1.0 - std::min(porosity, 1.0-3e-4))/ (std::max(porosity, 3e-4)); // 1-phi
-          //melt_out->compaction_viscosities[i] = out.viscosities[i] / (std::max(porosity, 3e-4)); // 1over
-          // melt_out->compaction_viscosities[i] = out.viscosities[i]*(2.0-2.7*std::log10(std::max(porosity,1e-3))); // uncomment for logarithmic dependence of bulk viscosity
+          // melt_out->compaction_viscosities[i] = out.viscosities[i] / (1.0 - std::min(porosity, 1.0-3e-4))/ (std::max(porosity, 3e-4)); // 1-phi
+          // melt_out->compaction_viscosities[i] = out.viscosities[i] / (std::max(porosity, 3e-4)); // 1over
+          //  melt_out->compaction_viscosities[i] = out.viscosities[i]*(2.0-2.7*std::log10(std::max(porosity,1e-3))); // uncomment for logarithmic dependence of bulk viscosity
         }
 
         // Calculate melting/freezing and composition reactions:
@@ -341,94 +330,90 @@ namespace aspect
             reaction_rate_out->reaction_rates[i][c] = 0.0;
         }
 
-        // if (this->include_melt_transport())
-        {
-          if (include_melting_and_freezing && in.requests_property(MaterialProperties::reaction_terms))
-          { // TODO this choice (crop porosity or not) makes an important difference!:
-            double c_tot_old = old_peridotite[i] * (1.0 - porosity) + old_peridotiteF[i] * porosity;
-            //double c_tot_old = old_peridotite[i] * (1.0 - old_porosity[i]) + old_peridotiteF[i] * old_porosity[i];
-            // Calculate solid and fluid compositions:
-            // (possible modification with depth = this->get_geometry_model().depth(point);) // works only without mesh deformation
-            double lithostatic_pressure = reference_gravity * reference_rho_s * (max_depth - in.position[i][1]);
-            double c_s;
-            double c_f;
-            int PTfield = 0;
-            c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f, PTfield); // use lithostatic pressure - mesh_deformation approximated by max topography (see function update())
-            //c_sf(in.temperature[i], in.pressure[i], c_s, c_f, PTfield); // use normal pressure instead
-            
-            if (c_f < c_s + 1e-5)
-              c_f = c_s + 1e-5; // avoid possible division by zero and switch between c_f and c_s
+        if (include_melting_and_freezing && in.requests_property(MaterialProperties::reaction_terms))
+        { // TODO this choice (crop porosity or not) makes an important difference!:
+          double c_tot_old = old_peridotite[i] * (1.0 - porosity) + old_peridotiteF[i] * porosity;
+          // double c_tot_old = old_peridotite[i] * (1.0 - old_porosity[i]) + old_peridotiteF[i] * old_porosity[i];
+          //  Calculate solid and fluid compositions:
+          //  (possible modification with depth = this->get_geometry_model().depth(point);) // works only without mesh deformation
+          double lithostatic_pressure = reference_gravity * reference_rho_s * (max_depth - in.position[i][1]);
+          double c_s;
+          double c_f;
+          int PTfield = 0;
+          c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f, PTfield); // use lithostatic pressure - mesh_deformation approximated by max topography (see function update())
+          // c_sf(in.temperature[i], in.pressure[i], c_s, c_f, PTfield); // use normal pressure instead
 
-            // Calculate updates of porosity and compositions.
-            // Updates of solid and melt compositions are calculated from mass conservation
-            // assuming equal densities of solid and melt.
-            for (unsigned int c = 0; c < in.composition[i].size(); ++c)
-            { // fill reaction rate outputs as the model uses operator splitting
-              if (this->get_parameters().use_operator_splitting && this->get_timestep_number() > 0)
+          if (c_f < c_s + 1e-5)
+            c_f = c_s + 1e-5; // avoid possible division by zero and switch between c_f and c_s
+
+          // Calculate updates of porosity and compositions.
+          // Updates of solid and melt compositions are calculated from mass conservation
+          // assuming equal densities of solid and melt.
+          for (unsigned int c = 0; c < in.composition[i].size(); ++c)
+          { // fill reaction rate outputs as the model uses operator splitting
+            if (this->get_parameters().use_operator_splitting && this->get_timestep_number() > 0)
+            {
+              if (reaction_rate_out != nullptr)
               {
-                if (reaction_rate_out != nullptr)
+                if (c_tot_old < c_s) //... below solidus - equilibrium porosity is 0
                 {
-                  if (c_tot_old < c_s) //... below solidus - equilibrium porosity is 0
-                  {
-                    if (c == peridotite_idx)
-                      if (PTfield > 0) // TODO rethink usage of PTfield
-                        reaction_rate_out->reaction_rates[i][c] =
-                            porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
-                      else // below wet solidus - solid composition tends to bulk composition
-                        reaction_rate_out->reaction_rates[i][c] =
-                            (c_tot_old - old_peridotite[i]) / melting_time_scale;
-                    else if (c == peridotiteF_idx)
-                      if (PTfield > 0) // TODO rethink usage of PTfield
-                        reaction_rate_out->reaction_rates[i][c] =
-                            //porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; //
-                            (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition // TODO which one is correct?
-                      else // below wet solidus - liquid composition arbitrary, tends to liquidus composition
-                        reaction_rate_out->reaction_rates[i][c] =
-                            //(c_tot_old - old_peridotite[i]) / melting_time_scale;
-                            (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition
-                    else if (c == porosity_idx)
+                  if (c == porosity_idx)
+                    reaction_rate_out->reaction_rates[i][c] =
+                        -old_porosity[i] / melting_time_scale;
+                  else if (c == peridotite_idx)
+                    if (PTfield > 0) // || porosity > 1e-3) // TODO rethink usage of PTfield, TODO epsilon
                       reaction_rate_out->reaction_rates[i][c] =
-                          -old_porosity[i] / melting_time_scale;
-                    else
-                      reaction_rate_out->reaction_rates[i][c] = 0.0;
-                  }
-
-                  else if (c_tot_old < c_f) // ... between solidus and liquidus
-                  { 
-                    const double Dc_s = c_s - old_peridotite[i];
-                    const double Dc_f = c_f - old_peridotiteF[i];
-                    // porosity update derived from lever rule
-                    const double Dpor = ((1.0 - old_porosity[i]) * Dc_s + old_porosity[i] * Dc_f) /
-                                        ((old_peridotite[i] + Dc_s / melting_time_scale * dtt) - (old_peridotiteF[i] + Dc_f / melting_time_scale * dtt));
-                    if (c == peridotite_idx)
+                          porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
+                    else // below wet solidus - solid composition tends to bulk composition
                       reaction_rate_out->reaction_rates[i][c] =
-                          Dc_s / melting_time_scale;
-                    else if (c == peridotiteF_idx)
+                          (c_tot_old - old_peridotite[i]) / melting_time_scale;
+                  else if (c == peridotiteF_idx)
+                    if (PTfield > 0 ) //|| porosity > 1e-3) // TODO rethink usage of PTfield, TODO epsilon
                       reaction_rate_out->reaction_rates[i][c] =
-                          Dc_f / melting_time_scale; //
-                    else if (c == porosity_idx)
-                      reaction_rate_out->reaction_rates[i][c] = Dpor / melting_time_scale;
-                    else
-                      reaction_rate_out->reaction_rates[i][c] = 0.0;
-                  }
-                  else // if ( c_tot_old > c_f) // temperature (composition) above liquidus - equilibrium porosity is 1
-                  {    // TODO porosity-old_porosity?
-                    if (c == peridotite_idx)
-                      reaction_rate_out->reaction_rates[i][c] = 
-                          (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; // may produce negative cs if we start out of equilibrium
-                    else if (c == peridotiteF_idx)
+                         //porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale; //
+                            (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition // TODO which one is correct? Why??
+                    else                                                                            // below wet solidus - liquid composition arbitrary, artificially adjusted to liquidus composition
                       reaction_rate_out->reaction_rates[i][c] =
-                          //(1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; //
-                          (c_tot_old - old_peridotiteF[i]) / melting_time_scale; // adjust liquid composition to bulk composition
-                    else if (c == porosity_idx)
-                      reaction_rate_out->reaction_rates[i][c] =
-                          (1.0 - old_porosity[i]) / melting_time_scale;
-                    else
-                      reaction_rate_out->reaction_rates[i][c] = 0.0;
-                  }
+                          (c_f - old_peridotiteF[i]) / melting_time_scale;
+                  else
+                    reaction_rate_out->reaction_rates[i][c] = 0.0;
                 }
-                out.reaction_terms[i][c] = 0.0;
+
+                else if (c_tot_old < c_f) // ... between solidus and liquidus
+                {
+                  const double Dc_s = c_s - old_peridotite[i];
+                  const double Dc_f = c_f - old_peridotiteF[i];
+                  // porosity update derived from lever rule
+                  const double Dpor = ((1.0 - old_porosity[i]) * Dc_s + old_porosity[i] * Dc_f) /
+                                      ((old_peridotite[i] + Dc_s / melting_time_scale * dtt) - (old_peridotiteF[i] + Dc_f / melting_time_scale * dtt));
+                  if (c == porosity_idx)
+                    reaction_rate_out->reaction_rates[i][c] = Dpor / melting_time_scale;
+                  else if (c == peridotite_idx)
+                    reaction_rate_out->reaction_rates[i][c] =
+                        Dc_s / melting_time_scale;
+                  else if (c == peridotiteF_idx)
+                    reaction_rate_out->reaction_rates[i][c] =
+                        Dc_f / melting_time_scale;
+                  else
+                    reaction_rate_out->reaction_rates[i][c] = 0.0;
+                }
+                else // if ( c_tot_old > c_f) // temperature (composition) above liquidus - equilibrium porosity is 1
+                {    // TODO porosity-old_porosity?
+                  if (c == porosity_idx)
+                    reaction_rate_out->reaction_rates[i][c] =
+                        (1.0 - old_porosity[i]) / melting_time_scale;
+                  else if (c == peridotite_idx)
+                    reaction_rate_out->reaction_rates[i][c] =
+                        (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; // may produce negative cs if we start out of equilibrium
+                  else if (c == peridotiteF_idx)
+                    reaction_rate_out->reaction_rates[i][c] =
+                        //(1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale;
+                        (c_tot_old - old_peridotiteF[i]) / melting_time_scale; // adjust liquid composition to bulk composition
+                  else
+                    reaction_rate_out->reaction_rates[i][c] = 0.0;
+                }
               }
+              out.reaction_terms[i][c] = 0.0;
             }
           }
         }
@@ -475,9 +460,15 @@ namespace aspect
           prm.declare_entry("Stress viscosity exponent", "1.",
                             Patterns::Double(0.),
                             "Stress exponent for viscosity calculation.");
-          prm.declare_entry("Reference melt viscosity", "10.",
-                            Patterns::Double(0.),
-                            "The value of the constant melt viscosity $\\eta_f$. Units: \\si{\\pascal\\second}.");
+          prm.declare_entry("Reference melt viscosity", "0.",
+                            Patterns::Double(),
+                            "The value of the reference melt viscosity $\\eta_f$ "
+                            "used for reference Darcy coefficient calculation."
+                            "Units: \\si{\\pascal\\second}.");
+          prm.declare_entry("Use constant melt viscosity", "true",
+                            Patterns::Bool(),
+                            "Whether to use constant melt viscosity or rather "
+                            "composition (interpreted as wt% water-content)- dependent one.");
           prm.declare_entry("Exponential melt weakening factor", "27.",
                             Patterns::Double(0.),
                             "The porosity dependence of the solid viscosity. Units: dimensionless.");
@@ -570,7 +561,6 @@ namespace aspect
           prm.declare_entry("Temperature width of dehydration reaction", "10.",
                             Patterns::Double(0.),
                             "Width of the temperature interval, over which the abrupt dehydration reaction is smoothed (K).");
-
         }
         prm.leave_subsection();
       }
@@ -591,6 +581,7 @@ namespace aspect
           eta_0 = prm.get_double("Reference shear viscosity");
           epsdot_0 = prm.get_double("Reference strainrate");
           eta_f = prm.get_double("Reference melt viscosity");
+          use_constant_eta_f = prm.get_bool("Use constant melt viscosity");
           reference_permeability = prm.get_double("Reference permeability");
           activation_energy = prm.get_double("Activation energy");
           stress_exponent = prm.get_double("Stress viscosity exponent");
@@ -600,12 +591,11 @@ namespace aspect
           alpha_phi = prm.get_double("Exponential melt weakening factor");
           composition_density_change = prm.get_double("Composition density change");
 
-          wBt = prm.get_double("Water in biotite"); 
+          wBt = prm.get_double("Water in biotite");
           wMu = prm.get_double("Water in muscovite");
           wMu0 = prm.get_double("Jump in muscovite");
-          wMu1 = wMu-wMu0;
+          wMu1 = wMu - wMu0;
           DT = prm.get_double("Temperature width of dehydration reaction");
-
 
           C_reference = prm.get_double("Reference solid composition");
           include_melting_and_freezing = prm.get_bool("Include melting and freezing");
