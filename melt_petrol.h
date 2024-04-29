@@ -40,7 +40,7 @@ namespace aspect
      * A material model that implements a simple formulation of
      * melting/freezing and different compositions of solid and melt.
      * Equilibrium melt fraction (porosity) is given by the lever rule.
-     * Solidus and liquidus temperatures depend linearly on
+     * Solidus and liquidus temperatures depend
      * (reference lithostatic) pressure and composition.
      * Model requires tracking of porosity, solid and melt (liquid) compositions.
      * Assumes cartesian coordinates and constant vertical gravity.
@@ -121,6 +121,7 @@ namespace aspect
       double eta_0;
       double epsdot_0;
       double eta_f;
+      bool use_constant_eta_f;
       double activation_energy;
       double stress_exponent;
       double thermal_expansivity;
