@@ -229,15 +229,18 @@ namespace aspect
         old_peridotiteF[i] = in.composition[i][peridotiteF_idx]; //
         old_porosity[i] = in.composition[i][porosity_idx];
         const double porosity = std::min(1.0, std::max(old_porosity[i], 0.0));
-
+        // TODO this choice (crop porosity or not) makes an important difference!:
+        double c_tot_old = old_peridotite[i] * (1.0 - porosity) + old_peridotiteF[i] * porosity;
+        // double c_tot_old = old_peridotite[i] * (1.0 - old_porosity[i]) + old_peridotiteF[i] * old_porosity[i];
+          
         // Calculate density:
         // temperature dependence of density is 1 - alpha * (T - Tref)
         double temperature_dependence = 1.0;
         temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
         // calculate composition dependence of density
         const double delta_rho = this->introspection().compositional_name_exists("peridotite")
-                                     ? composition_density_change * (C_reference - old_peridotite[i]) // std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus))
-                                     : 0.0;                                                           //
+                                     ? composition_density_change * (C_reference - c_tot_old)  //(C_reference - old_peridotite[i])
+                                     : 0.0;                                                          
         out.densities[i] = (reference_rho_s + delta_rho) * temperature_dependence;
         // Calculate viscosity:
         out.viscosities[i] = eta_0;
@@ -313,8 +316,8 @@ namespace aspect
           }
 
           // Calculate melt density:
-          // compositional dependence of melt density is neglected, as it is smaller than for solid density
-          const double delta_rho = 0.0;
+          // compositional dependence of melt density is neglected ??
+          // const double delta_rho = 0.0;
           double temperature_dependence = 1.0;
           temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
           melt_out->fluid_densities[i] = (reference_rho_f + delta_rho) * temperature_dependence;
@@ -335,9 +338,7 @@ namespace aspect
         }
 
         if (include_melting_and_freezing && in.requests_property(MaterialProperties::reaction_terms))
-        { // TODO this choice (crop porosity or not) makes an important difference!:
-          double c_tot_old = old_peridotite[i] * (1.0 - porosity) + old_peridotiteF[i] * porosity;
-          // double c_tot_old = old_peridotite[i] * (1.0 - old_porosity[i]) + old_peridotiteF[i] * old_porosity[i];
+        { 
           //  Calculate solid and fluid compositions:
           //  (possible modification with depth = this->get_geometry_model().depth(point);) // works only without mesh deformation
           double lithostatic_pressure = reference_gravity * reference_rho_s * (max_depth - in.position[i][1]);
