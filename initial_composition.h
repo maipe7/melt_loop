@@ -34,6 +34,18 @@ namespace aspect
          */
         double initial_composition (const Point<dim> &position,
                                     const unsigned int compositional_index) const override;
+
+        static
+        void
+        declare_parameters (ParameterHandler &prm);
+
+        void
+        parse_parameters (ParameterHandler &prm) override;
+
+
+      private:
+        double c0;
+   
     };
   }
 }

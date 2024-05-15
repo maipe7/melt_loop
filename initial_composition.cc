@@ -43,7 +43,7 @@ namespace aspect
       }
       else if (compositional_index ==  peridotite_index)
       {
-        double c0=0.7;
+        //double c0=0.7;
         double cvar0=0.1;
         double xsize=1e3;
         double ysize=10e3;
@@ -79,8 +79,45 @@ namespace aspect
       }
       return 0.0;
     }
+
+    template <int dim>
+    void
+    PPP<dim>::declare_parameters (ParameterHandler &prm)
+    {
+      prm.enter_subsection("Initial composition model");
+      {
+        prm.enter_subsection("PPP");
+        {
+          prm.declare_entry("Reference composition","1.0",
+                            Patterns::Double(0.),
+                            "Reference composition."
+                            "Units: --}.");
+        }
+        prm.leave_subsection();
+      }
+      prm.leave_subsection();
+    }
+
+
+    template <int dim>
+    void
+    PPP<dim>::parse_parameters (ParameterHandler &prm)
+    {
+
+      prm.enter_subsection("Initial composition model");
+      {
+        prm.enter_subsection("PPP");
+        {
+           c0 = prm.get_double ("Reference composition");
+        }
+        prm.leave_subsection();
+      }
+      prm.leave_subsection();
+      
+    }
   }
 }
+
 
 // explicit instantiations
 namespace aspect

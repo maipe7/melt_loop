@@ -191,7 +191,7 @@ namespace aspect
           }
         }
       max_depth = Utilities::MPI::max(max_depth_partition, this->get_mpi_communicator());
-      std::cout << this->get_geometry_model().maximal_depth() << max_depth_partition;
+      max_depth = 30e3;
     }
 
     template <int dim>
@@ -216,7 +216,6 @@ namespace aspect
                                                                std::max(this->get_parameters().reaction_steps_per_advection_step, 1U));
         dtt = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
       }
-      // Prepare gravity for calculation of lithostatic pressure: - move to update()?
       const double reference_depth = 0.0;
       const Point<dim> representative_point = this->get_geometry_model().representative_point(reference_depth);
       const double reference_gravity = this->get_gravity_model().gravity_vector(representative_point).norm();
@@ -281,7 +280,7 @@ namespace aspect
             edot_ii = std::max(std::sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))), epsdot_0);
           out.viscosities[i] *= std::pow(edot_ii, ((1.0 - stress_exponent) / stress_exponent));
           // total value of shear viscosity is cropped to min and max values
-          out.viscosities[i] = std::min(std::max(out.viscosities[i], 1e17), 1e23); // TODO modif 1e16
+          out.viscosities[i] = std::min(std::max(out.viscosities[i], 1e16), 1e23); // TODO modif 1e16
         }
 
         // Fill in melt material properties:
@@ -409,6 +408,7 @@ namespace aspect
                         (1.0 - old_porosity[i]) / melting_time_scale;
                   else if (c == peridotite_idx)
                     reaction_rate_out->reaction_rates[i][c] =
+                        //(c_tot_old - old_peridotite[i]) / melting_time_scale; // ??
                         (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; // may produce negative cs if we start out of equilibrium
                   else if (c == peridotiteF_idx)
                     reaction_rate_out->reaction_rates[i][c] =

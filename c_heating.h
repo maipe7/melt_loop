@@ -15,8 +15,8 @@ namespace aspect
       public:
         /*
          * This heating model calculates heat production dependent on composition.
-         * The composition is defined according to the Melt global material model:
-         * composition=peridotite-porosity
+         * The composition is defined as
+         * composition=(1-porosity)*peridotite+porosity*peridotiteF
          */
         void
         evaluate (const MaterialModel::MaterialModelInputs<dim> &material_model_inputs,
