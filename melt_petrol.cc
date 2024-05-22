@@ -340,13 +340,13 @@ namespace aspect
         if (include_melting_and_freezing && in.requests_property(MaterialProperties::reaction_terms))
         { 
           //  Calculate solid and fluid compositions:
-          //  (possible modification with depth = this->get_geometry_model().depth(point);) // works only without mesh deformation
-          double lithostatic_pressure = reference_gravity * reference_rho_s * (max_depth - in.position[i][1]);
           double c_s;
           double c_f;
           int PTfield = 0;
-          c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f, PTfield); // use lithostatic pressure - mesh_deformation approximated by max topography (see function update())
-          // c_sf(in.temperature[i], in.pressure[i], c_s, c_f, PTfield); // use normal pressure instead
+          //double lithostatic_pressure = reference_gravity * reference_rho_s * (max_depth - in.position[i][1]); //  (possible modification with depth = this->get_geometry_model().depth(point);) // works only without mesh deformation
+          //c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f, PTfield); // use lithostatic pressure - mesh_deformation approximated by max topography (see function update())
+          double dynamic_pressure = in.pressure[i] + reference_gravity * reference_rho_s * 20e3; // TODO improve    
+           c_sf(in.temperature[i], dynamic_pressure, c_s, c_f, PTfield); // use normal pressure instead
 
           if (c_f < c_s + 1e-5)
             c_f = c_s + 1e-5; // avoid possible division by zero and switch between c_f and c_s
