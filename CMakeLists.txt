@@ -1,4 +1,4 @@
-#cmake -DAspect_DIR=/opt/aspect/src/build .; make
+# cmake -DAspect_DIR=/opt/aspect/src/build .; make
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 
 FIND_PACKAGE(Aspect 2.4.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
