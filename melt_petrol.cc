@@ -345,7 +345,8 @@ namespace aspect
           int PTfield = 0;
           //double lithostatic_pressure = reference_gravity * reference_rho_s * (max_depth - in.position[i][1]); //  (possible modification with depth = this->get_geometry_model().depth(point);) // works only without mesh deformation
           //c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f, PTfield); // use lithostatic pressure - mesh_deformation approximated by max topography (see function update())
-          double dynamic_pressure = in.pressure[i] + reference_gravity * reference_rho_s * 20e3; // TODO improve    
+          //double dynamic_pressure = in.pressure[i] + reference_gravity * reference_rho_s * 20e3; // TODO improve    
+          double dynamic_pressure = in.pressure[i]; // pressure on top set in BCs
            c_sf(in.temperature[i], dynamic_pressure, c_s, c_f, PTfield); // use normal pressure instead
 
           if (c_f < c_s + 1e-5)

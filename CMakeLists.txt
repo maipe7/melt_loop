@@ -21,3 +21,9 @@ SET(TARGET "c_heating")
 PROJECT(${TARGET})
 ADD_LIBRARY(${TARGET} SHARED c_heating.cc)
 ASPECT_SETUP_PLUGIN(${TARGET})
+
+
+SET(TARGET "initial_composition")
+PROJECT(${TARGET})
+ADD_LIBRARY(${TARGET} SHARED initial_composition.cc)
+ASPECT_SETUP_PLUGIN(${TARGET})

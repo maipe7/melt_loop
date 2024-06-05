@@ -7,7 +7,7 @@
 set Additional shared libraries            = ./libmelt_petrol.so, ./libc_heating.so, ./libinitial_composition.so
 
 set Dimension                              = 2
-set Output directory                       = outputs/thermal-melt-petrol-2d-varCP-30kmdeep-200-10-k8-eta1/
+set Output directory                       = outputs/thermal-melt-petrol-2d-varCPS1-30kmdeep-200-10-k8-eta1-P/
 set Use years in output instead of seconds = true
 #set Maximum time step                      = 1e5
 set Maximum time step                      = 2e5
@@ -15,6 +15,9 @@ set Maximum first time step                = 1e4
 set Maximum relative increase in time step = 20
 set End time                               = 10e6
 set Nonlinear solver scheme = single Advection, single Stokes
+
+set Pressure normalization = surface # default
+set Surface pressure = 0.56e9 # (Pa) 2800*10*20e3
 
 #set Resume computation = true # attention - which timestep is the last checkpoint?
 
@@ -27,6 +30,7 @@ subsection Solver parameters
   end
  subsection Stokes solver parameters
     set GMRES solver restart length            = 200
+    set Number of cheap Stokes solver steps = 100
   end
 end
 
@@ -46,6 +50,7 @@ subsection Geometry model
      set Y extent = 10e3
      set X repetitions = 100
      set Y repetitions = 200
+     set X periodic = true
    end
 end
 
@@ -60,15 +65,12 @@ subsection Gravity model
 end
 
 subsection Boundary velocity model
-  set Prescribed velocity boundary indicators = bottom y:function, left x:function, right x:function
+  set Prescribed velocity boundary indicators = bottom:function, top:function
   subsection Function
-  # constant or exponential shortening
-  # for (theoretically) constant strainrate~vx/(s0-sx)~v0*exp(-t/tchar)/(s0-v0*tchar*(1-exp(-t/tchar)))
-  # then v0(m/yr)=s0(km)/tchar(Myr), after tchar, the velocity decreases to 36%
    set Function constants = \
-     vtecto=0.00, verosion=0.000
+     vtecto=0.00, verosion=0.000, vshear=0.0005
     set Function expression = \
-      (x>1? -1 : 1)*vtecto;\
+      (x>1? -1 : 1)*vtecto+(y<1? -1 : 1)*vshear;\
       (y>1? verosion : -vtecto+verosion)
   end
 end
@@ -76,7 +78,7 @@ end
 subsection Initial temperature model
   set List of model names = function
   subsection Function
-    set Function expression = 273 + 650
+    set Function expression = 273 + 630
   end
 end
 
@@ -84,7 +86,7 @@ subsection Boundary temperature model
   set Fixed temperature boundary indicators = top, bottom
   set List of model names =  function
   subsection Function
-    set Function constants = T0=650, Tinc=200
+    set Function constants = T0=630, Tinc=200
     set Function expression = 273 + T0 + (t<1e6 ? t/1e6*Tinc : Tinc)*(10e3-y)/10e3
   end
 end
@@ -103,7 +105,7 @@ subsection Heating model
     set Melting entropy change = -300.0
   end
   subsection Composition melt heating
-    set Reference composition = 0.7
+    set Reference composition = 1.0
     set Heat production for reference composition = 1.7e-6 # W/m3, valid for cref
   end
 end
@@ -225,6 +227,8 @@ end
 subsection Checkpointing
   set Steps between checkpoint = 10
 end
+
+
 
 
 

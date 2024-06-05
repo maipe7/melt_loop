@@ -46,9 +46,9 @@ namespace aspect
         //double c0=0.7;
         double cvar0=0.1;
         double xsize=5e3;
-        double ysize=10e3;
+        double ysize=8e3;
         double size0=200;
-        int nanomaly=1000;
+        int nanomaly=800;
         if (this->get_timestep_number() > 0) nanomaly=0;
         double x=position[0];
         double y=position[1];
