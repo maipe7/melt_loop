@@ -1,0 +1,228 @@
+# this model is 2D
+# TODO:
+# Find source of oscillations in rhof=rhos case
+# Find source of composition leak
+# THERE IS A PROBLEM WITH MESH REFINEMENT AND MELT FLOW!
+
+set Additional shared libraries            = ./libmelt_petrol.so, ./libc_heating.so, ./libinitial_composition.so
+
+set Dimension                              = 2
+set Output directory                       = outputs/thermal-melt-layers-1/
+set Use years in output instead of seconds = true
+set Maximum time step                      = 1e4
+set Maximum first time step                = 1e3
+set Maximum relative increase in time step = 20
+set CFL number                             = 0.2
+set End time                               = 5e5
+set Nonlinear solver scheme = single Advection, single Stokes
+
+set Pressure normalization = surface # default
+set Surface pressure = 0.56e9 # (Pa) 2800*10*20e3
+
+#set Resume computation = true # attention - which timestep is the last checkpoint?
+
+subsection Geometry model
+  set Model name = box
+   subsection Box
+     set X extent = 4
+     set Y extent = 1
+     set X repetitions = 100 #100
+     set Y repetitions = 25 #100
+     #set X periodic = true
+   end
+end
+
+subsection Discretization
+end
+
+# Use operator splitting scheme to correctly calculate reaction terms:
+set Use operator splitting                 = true
+subsection Solver parameters
+  subsection Operator splitting parameters
+    set Reaction time step                     = 200
+    set Reaction time steps per advection step = 10
+  end
+ subsection Stokes solver parameters
+    set GMRES solver restart length            = 200
+    set Number of cheap Stokes solver steps = 100
+  end
+end
+
+subsection Melt settings
+  set Include melt transport = false #true #false
+  set Heat advection by melt = true
+  set Melt scaling factor threshold = 1.0
+end
+
+subsection Formulation
+end
+
+subsection Gravity model
+  set Model name = vertical
+  subsection Vertical
+    set Magnitude = 10.0
+  end
+end
+
+subsection Boundary velocity model
+  set Prescribed velocity boundary indicators = bottom y:function, left x:function, right x:function
+  subsection Function
+   set Function constants = \
+     vtecto=1.5e-6, vshear=0.000
+    set Function expression = \
+      (x>0.5? -1 : 1)*vtecto+(y<0.5? -1 : 1)*vshear;\
+      -vtecto*0
+  end
+end
+
+subsection Initial temperature model
+  set List of model names = function
+  subsection Function
+    set Function expression = 273 + 630 + 150 
+  end
+end
+
+subsection Boundary temperature model
+  set Fixed temperature boundary indicators = top, bottom
+  set List of model names =  function
+  subsection Function
+    set Function constants = T0=630, Tinc=0
+    set Function expression = 273 + T0 + 150.0 # (t<1e6 ? t/1e6*Tinc : Tinc)
+  end
+end
+
+subsection Heating model # NULL
+  #set List of model names = latent heat melt , composition melt heating #function
+  subsection Latent heat melt
+    set Melting entropy change = -300.0
+  end
+  subsection Composition melt heating
+    set Reference composition = 1.0
+    set Heat production for reference composition = 1.7e-6 # W/m3, valid for cref
+  end
+end
+
+############# Composition, IC and BC ########################
+# Compositional fields:
+# porosity (phi) tracks motion of melt,
+# peridotite (c_s) tracks composition of solid,
+# peridotiteF tracks composition of melt
+subsection Compositional fields
+  set Number of fields            = 3
+  set Names of fields             = porosity, peridotite, peridotiteF
+  set Compositional field methods = field, field, field #melt field
+end
+
+# Initial porosity is zero.
+subsection Initial composition model
+  set Model name = PPP
+  subsection PPP
+    set Reference composition = 0.8
+  end
+end
+
+# Boundary conditions for composition
+subsection Boundary composition model
+  set Fixed composition boundary indicators = bottom, left, right # todo top boundary??
+  set List of model names = initial composition
+end
+
+subsection Boundary fluid pressure model
+  set Plugin name = density
+  subsection Density
+    set Density formulation = fluid density
+  end
+end
+
+########### Material #############
+# We use the modified melt global material model
+# that includes melting and freezing of melt
+subsection Material model
+  set Model name = melt petrol
+  subsection Melt petrol
+    set Melting time scale for operator splitting = 1e3
+    set Reference temperature                     = 273.0
+    set Thermal conductivity                      = 2.5
+    set Reference solid density                   = 2800.0
+    set Reference melt density                    = 2400.0
+    set Thermal expansion coefficient             = 0e-5
+    set Composition density change                = 200.0
+
+    set Reference permeability                    = 1e-8
+    set Reference melt viscosity                  = 1e4 # overwritten in .cc file
+    set Use constant melt viscosity               = false
+
+    set Water in biotite                          = 0.5
+    set Water in muscovite                        = 0.5 # total in muscovite
+    set Jump in muscovite                         = 0.2
+    set Temperature width of dehydration reaction = 10
+
+    set Reference solid composition               = 0.8
+    set Reference strainrate                      = 1e-14
+    set Stress viscosity exponent                 = 2.4
+    set Reference shear viscosity                 = 4.51e7 #2.27e8
+    set Activation energy                         = 156000.0
+    set Exponential melt weakening factor         = 20.0
+    set Exponential compositional strengthening factor = 0.0 #4.6
+    set Maximum compositional viscosity change    = 1e4
+  end
+end
+
+subsection Mesh refinement
+  set Initial global refinement                = 0
+  set Initial adaptive refinement              = 0
+  set Time steps between mesh refinement       = 0
+  set Strategy =  minimum refinement function,  composition threshold
+  subsection Minimum refinement function
+    set Coordinate system =  cartesian
+    set Function expression = ( (x>40e3)&&(x<120e3) ? 1: 0)
+  end
+  subsection Composition threshold
+    set Compositional field thresholds = 0.01, 1.0, 5.0
+  end
+  #set Additional refinement times = 20e6
+end
+
+subsection Postprocess
+  set List of postprocessors = visualization, temperature statistics, velocity statistics, composition statistics, particles, depth average
+  subsection Visualization
+    set List of output variables      = material properties, heating, heat flux map,  strain rate #,  melt material properties
+    subsection Material properties
+      set List of material properties = density, viscosity
+    end
+    subsection Melt material properties
+      set List of properties =  fluid density, fluid viscosity, is melt cell, darcy coefficient,  compaction viscosity,  permeability
+    end
+    set Time between graphical output = 1e5
+    set Time steps between graphical output = 10
+  end
+  subsection Depth average
+    set List of output variables = temperature, composition, log viscosity
+    set Number of zones = 80
+    set Output format = txt #gnuplot
+    set Time between graphical output = 1e6
+  end
+  subsection Particles
+    set Allow cells without particles = true
+    set Data output format = ascii
+    set List of particle properties =  pT path, composition
+    #set Number of particles = 1
+    set Particle generator name = ascii file #uniform box
+    set Time between data output = 1e6
+    subsection Generator
+      subsection Ascii file
+        set Data directory = ./
+        set Data file name = particles-2d.dat
+      end
+    end
+  end
+end
+subsection Checkpointing
+  set Steps between checkpoint = 10
+end
+
+
+
+
+
+

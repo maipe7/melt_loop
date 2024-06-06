@@ -44,33 +44,40 @@ namespace aspect
       else if (compositional_index ==  peridotite_index)
       {
         //double c0=0.7;
-        double cvar0=0.1;
-        double xsize=5e3;
-        double ysize=8e3;
-        double size0=200;
-        int nanomaly=800;
+        double cvar0=0.05; //0.1;
+        double xsize=4.0; //5e3;
+        double ysize=1.0; //8e3;
+        int xyratio = ceil(ysize*0.99/xsize);
+        double size0=0.1; //200;
+        int nanomaly=100; //800;
         if (this->get_timestep_number() > 0) nanomaly=0;
         double x=position[0];
         double y=position[1];
         double c = c0;
+        c *=(1-0.2*sin(50*y/(ysize)));
+        // divide domain to 100x100 grid
+        int ngrid = 100;
         for (double i=0; i<nanomaly; i++)
         {
           srand(i);
-          double xcenter=rand()%int(xsize);
+          double xcenter=xsize/ngrid*(rand()%ngrid);
           srand(i*2);
-          double ycenter=rand()%int(ysize);
-
+          double ycenter=ysize/(ngrid*xyratio)*(rand()%(ngrid*xyratio));
           srand(i*3);
           // allow both negative and positive anomalies
-          double cvar=cvar0*0.1*(rand()%20-10);
-
+          double cvar=cvar0/ngrid*(rand()%ngrid-ngrid*0.5);
           srand(i*4);
-          double size=rand()%int(size0);
+          double size=size0/ngrid*(rand()%ngrid+1);
+          //cout << xcenter << " " << ycenter << " " << cvar << " " << size << "\n";
 
           c += cvar*std::exp(-(std::pow(x-xcenter,2)+std::pow(y-ycenter,2))/std::pow(size,2));
         }
         // composition diminishes to zero near bottom boundary
-        if(y<1e3) c*= y/1e3;
+        //if(y<1e3) c*= y/1e3;
+        double boundwidth = 0.05;  
+        if(y<boundwidth) c*=y/boundwidth;
+        if(x<boundwidth) c*=x/boundwidth;
+        if(x>xsize-boundwidth) c*=(xsize-x)/boundwidth;
         return c;
       }
       else if (compositional_index ==  peridotiteF_index)
