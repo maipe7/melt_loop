@@ -191,7 +191,7 @@ namespace aspect
           }
         }
       max_depth = Utilities::MPI::max(max_depth_partition, this->get_mpi_communicator());
-      max_depth = 30e3;
+      max_depth = 50e3;
     }
 
     template <int dim>
@@ -238,10 +238,11 @@ namespace aspect
         double temperature_dependence = 1.0;
         temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
         // calculate composition dependence of density
-        const double delta_rho = this->introspection().compositional_name_exists("peridotite")
-                                     ? composition_density_change * (C_reference - c_tot_old)  //(C_reference - old_peridotite[i])
-                                     : 0.0;                                                          
-        out.densities[i] = (reference_rho_s + delta_rho) * temperature_dependence;
+        double delta_rho = this->introspection().compositional_name_exists("peridotite")
+                                   ? composition_density_change * (C_reference - c_tot_old) : 0.0;
+                                // ? composition_density_change * (C_reference - old_peridotite[i]) : 0.0;
+        delta_rho = 0.01 * std::max (std::min ( delta_rho, max_composition_density_change), -max_composition_density_change);
+        out.densities[i] = reference_rho_s * (1.0 + delta_rho) * temperature_dependence;
         // Calculate viscosity:
         out.viscosities[i] = eta_0;
         if (in.requests_property(MaterialProperties::viscosity)) // needed, because the strain_rate may not be filled otherwise
@@ -255,15 +256,16 @@ namespace aspect
           double A = 0.05;
           double width = 0.26; // coke // fits Costa/Keller well for 5 orders of magnitude decrease
           out.viscosities[i] *= exp(-alpha_phi * porosity) * ((porosity > A) ? (porosity < A + width ? (std::exp(-width / (-porosity + A + width)) /
-                                                                                                        (std::exp(-width / (-porosity + A + width)) + std::exp(-width / (width - (-porosity + A + width)))))
-                                                                                                     : 0.0)
-                                                                             : 1.0);
+                                            (std::exp(-width / (-porosity + A + width)) + std::exp(-width / (width - (-porosity + A + width)))))
+                                         : 0.0)
+                                         : 1.0);
 
           // normalized solid composition:
-          const double C_solid_normalized = (old_peridotite[i] - C_reference);
+          const double C_solid_normalized = (C_reference - old_peridotite[i]);
           // const double C_solid_normalized = std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus));
           //  composition-dependent term:
-          const double visc_composition_dependence = std::min(exp(-alpha_composition * C_solid_normalized), delta_eta_composition_max);
+          const double visc_composition_dependence = 
+            std::max( std::min(exp(alpha_composition * C_solid_normalized), max_delta_eta_composition), 1./max_delta_eta_composition);
           out.viscosities[i] *= visc_composition_dependence;
           // temperature dependence of viscosity:
           double visc_temperature_dependence = 1.0;
@@ -282,6 +284,7 @@ namespace aspect
           else
             edot_ii = std::max(std::sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))), epsdot_0);
           out.viscosities[i] *= std::pow(edot_ii, ((1.0 - stress_exponent) / stress_exponent));
+          // if (in.position[i][1]<0.25) out.viscosities[i]=1e17; // TEMPORARY - layers
           // total value of shear viscosity is cropped to min and max values
           out.viscosities[i] = std::min(std::max(out.viscosities[i], 1e16), 1e23); // TODO modif 1e16
         }
@@ -316,11 +319,10 @@ namespace aspect
           }
 
           // Calculate melt density:
-          // compositional dependence of melt density is neglected ??
-          // const double delta_rho = 0.0;
+          //const double delta_rho = 0.0; compositional dependence of melt density is neglected
           double temperature_dependence = 1.0;
           temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
-          melt_out->fluid_densities[i] = (reference_rho_f + delta_rho) * temperature_dependence;
+          melt_out->fluid_densities[i] = reference_rho_f * (1.0 + delta_rho) * temperature_dependence;
           // compaction viscosity defined relatively to shear viscosity
           melt_out->compaction_viscosities[i] = out.viscosities[i] * (2.0 + 0.3 / std::max(porosity, 3e-4)); // ref
           // melt_out->compaction_viscosities[i] = out.viscosities[i] / (1.0 - std::min(porosity, 1.0-3e-4))/ (std::max(porosity, 3e-4)); // 1-phi
@@ -345,9 +347,8 @@ namespace aspect
           int PTfield = 0;
           //double lithostatic_pressure = reference_gravity * reference_rho_s * (max_depth - in.position[i][1]); //  (possible modification with depth = this->get_geometry_model().depth(point);) // works only without mesh deformation
           //c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f, PTfield); // use lithostatic pressure - mesh_deformation approximated by max topography (see function update())
-          //double dynamic_pressure = in.pressure[i] + reference_gravity * reference_rho_s * 20e3; // TODO improve    
           double dynamic_pressure = in.pressure[i]; // pressure on top set in BCs
-           c_sf(in.temperature[i], dynamic_pressure, c_s, c_f, PTfield); // use normal pressure instead
+          c_sf(in.temperature[i], dynamic_pressure, c_s, c_f, PTfield); // use dynamic pressure
 
           if (c_f < c_s + 1e-5)
             c_f = c_s + 1e-5; // avoid possible division by zero and switch between c_f and c_s
@@ -362,6 +363,7 @@ namespace aspect
               if (reaction_rate_out != nullptr)
               {
                 if (c_tot_old < c_s) //... below solidus - equilibrium porosity is 0
+                //if (c_tot_old < c_s || in.position[i][1]< 0.25 ) //... below solidus - equilibrium porosity is 0 TEMPORARY - layers
                 {
                   if (c == porosity_idx)
                     reaction_rate_out->reaction_rates[i][c] =
@@ -498,10 +500,14 @@ namespace aspect
                             Patterns::Double(),
                             "Reference permeability of the solid host rock."
                             "Units: \\si{\\meter\\squared}.");
-          prm.declare_entry("Composition density change", "0.0",
+          prm.declare_entry("Composition pc density change", "0.0",
                             Patterns::Double(),
-                            "Chenge of density due to compositional change of 1. "
-                            "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
+                            "Change of density due to compositional change of 1 (in percent). "
+                            "Units: percent.");
+          prm.declare_entry("Maximum composition pc density change", "0.0",
+                            Patterns::Double(),
+                            "Maximum change of density due to composition. "
+                            "Units: percent.");
           prm.declare_entry("Surface solidus", "1300.",
                             Patterns::Double(0.),
                             "Solidus at the surface (zero lithostatic pressure). "
@@ -546,15 +552,15 @@ namespace aspect
                             "computed. If the model does not use operator splitting, this parameter is not used. "
                             "Units: yr or s, depending on the ``Use years "
                             "in output instead of seconds'' parameter.");
-          prm.declare_entry("Exponential compositional strengthening factor", "0.0",
+          prm.declare_entry("Exponential compositional viscosity factor", "0.0",
                             Patterns::Double(0.),
-                            "Exponential dependency of solid viscosity on the (scaled) "
+                            "Exponential dependency of solid viscosity on the "
                             "solid composition (peridotite field). "
                             "Dimensionless factor. With a value of 0.0 (the default) the "
                             "viscosity does not depend on the composition.");
-          prm.declare_entry("Maximum compositional viscosity change", "1e3",
+          prm.declare_entry("Maximum rel compositional viscosity change", "1.0",
                             Patterns::Double(0.),
-                            "Maximum relative increase of solid viscosity due to composition variations. ");
+                            "Maximum relative change of solid viscosity due to composition variations.");
 
           prm.declare_entry("Water in biotite", "0.5",
                             Patterns::Double(0.),
@@ -596,7 +602,8 @@ namespace aspect
           reference_specific_heat = prm.get_double("Reference specific heat");
           thermal_expansivity = prm.get_double("Thermal expansion coefficient");
           alpha_phi = prm.get_double("Exponential melt weakening factor");
-          composition_density_change = prm.get_double("Composition density change");
+          composition_density_change = prm.get_double("Composition pc density change");
+          max_composition_density_change = prm.get_double("Maximum composition pc density change");
 
           wBt = prm.get_double("Water in biotite");
           wMu = prm.get_double("Water in muscovite");
@@ -607,8 +614,8 @@ namespace aspect
           C_reference = prm.get_double("Reference solid composition");
           include_melting_and_freezing = prm.get_bool("Include melting and freezing");
           melting_time_scale = prm.get_double("Melting time scale for operator splitting");
-          alpha_composition = prm.get_double("Exponential compositional strengthening factor");
-          delta_eta_composition_max = prm.get_double("Maximum compositional viscosity change");
+          alpha_composition = prm.get_double("Exponential compositional viscosity factor");
+          max_delta_eta_composition = prm.get_double("Maximum rel compositional viscosity change");
 
           AssertThrow(stress_exponent > 0, ExcMessage("Stress exponent has to be > 0!"));
 

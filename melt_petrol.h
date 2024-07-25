@@ -130,11 +130,12 @@ namespace aspect
       double reference_permeability;
       double alpha_phi;
       double composition_density_change;
+      double max_composition_density_change;
       bool include_melting_and_freezing;
       double melting_time_scale;
       double alpha_composition;
       double C_reference;
-      double delta_eta_composition_max;
+      double max_delta_eta_composition;
 
       double wBt;
       double wMu;
