@@ -60,7 +60,7 @@ namespace aspect
        * Update the base model and viscosity function at the beginning of
        * each timestep.
        */
-      void update() override;
+      //void update() override;
 
       /**
        * Evaluates values of material parameters and reaction terms.
@@ -136,6 +136,7 @@ namespace aspect
       double alpha_composition;
       double C_reference;
       double max_delta_eta_composition;
+      int melt_viscosity_law;
 
       double wBt;
       double wMu;

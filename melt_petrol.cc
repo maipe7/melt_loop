@@ -166,36 +166,6 @@ namespace aspect
 
     template <int dim>
     void
-    MeltPetrol<dim>::update()
-    // calculate maximum depth of the domain to be used in lithostatic pressure computation
-    // TODO check if this->get_geometry_model().maximal_depth() does the job...
-    {
-      const QTrapez<dim> quadrature_formula;
-      const unsigned int n_q_points = quadrature_formula.size(); // TODO or fe_values.n_quadrature_points?
-      FEValues<dim> fe_values(this->get_mapping(), this->get_fe(), quadrature_formula,
-                              update_JxW_values | update_values | update_gradients | update_quadrature_points);
-      MaterialModel::MaterialModelInputs<dim> in(n_q_points, this->n_compositional_fields());
-      MaterialModel::MaterialModelOutputs<dim> out(n_q_points, this->n_compositional_fields());
-
-      max_depth = 0.0;
-      double max_depth_partition = 0.0;
-      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
-        if (cell->is_locally_owned())
-        { // the cell is owned by the current processor
-          fe_values.reinit(cell);
-          in.reinit(fe_values, cell, this->introspection(), this->get_solution());
-          this->get_material_model().evaluate(in, out);
-          for (unsigned int i = 0; i < in.n_evaluation_points(); ++i)
-          {
-            max_depth_partition = std::max(max_depth_partition, in.position[i][1]);
-          }
-        }
-      max_depth = Utilities::MPI::max(max_depth_partition, this->get_mpi_communicator());
-      max_depth = 50e3;
-    }
-
-    template <int dim>
-    void
     MeltPetrol<dim>::
         evaluate(const typename Interface<dim>::MaterialModelInputs &in, typename Interface<dim>::MaterialModelOutputs &out) const
     {
@@ -313,9 +283,12 @@ namespace aspect
              EA(W)=(448.03-252.12*W**0.11)*1e3
              LogEta(T,W)=LogEta0+EA(W)/(2.303*R*T)
              eta(T,W)=10.0**LogEta(T,W) */
-            double eta_f_Schulze = std::pow(10.0, -2.5726 + (448.03 - 252.12 * std::pow(waterWtPc, 0.11)) * 1e3 / (2.303 * 8.31) * invtemperature);
-            // double eta_f_Scaillet = std::pow(10.0, -7.5461 + 16280.*invtemperature + (0.59784-1235.4*invtemperature)*waterWtPc); // too low?!
-            melt_out->fluid_viscosities[i] = std::max(std::min(eta_f_Schulze, 1e7), 1e2); // TODO test without cropping
+            double eta_f;
+            if (melt_viscosity_law==2)
+              eta_f = std::pow(10.0, -7.5461 + 16280.*invtemperature + (0.59784-1235.4*invtemperature)*waterWtPc); // too low?! // Scaillet
+            else
+              eta_f = std::pow(10.0, -2.5726 + (448.03 - 252.12 * std::pow(waterWtPc, 0.11)) * 1e3 / (2.303 * 8.31) * invtemperature); // Schulze
+            melt_out->fluid_viscosities[i] = std::max(std::min(eta_f, 1e7), 1e2); // TODO test without cropping
           }
 
           // Calculate melt density:
@@ -327,7 +300,7 @@ namespace aspect
           melt_out->compaction_viscosities[i] = out.viscosities[i] * (2.0 + 0.3 / std::max(porosity, 3e-4)); // ref
           // melt_out->compaction_viscosities[i] = out.viscosities[i] / (1.0 - std::min(porosity, 1.0-3e-4))/ (std::max(porosity, 3e-4)); // 1-phi
           // melt_out->compaction_viscosities[i] = out.viscosities[i] / (std::max(porosity, 3e-4)); // 1over
-          //  melt_out->compaction_viscosities[i] = out.viscosities[i]*(2.0-2.7*std::log10(std::max(porosity,1e-3))); // uncomment for logarithmic dependence of bulk viscosity
+          // melt_out->compaction_viscosities[i] = out.viscosities[i]*(2.0-2.7*std::log10(std::max(porosity,1e-3))); // uncomment for logarithmic dependence of bulk viscosity
         }
 
         // Calculate melting/freezing and composition reactions:
@@ -574,6 +547,10 @@ namespace aspect
           prm.declare_entry("Temperature width of dehydration reaction", "10.",
                             Patterns::Double(0.),
                             "Width of the temperature interval, over which the abrupt dehydration reaction is smoothed (K).");
+          prm.declare_entry("Melt viscosity law", "1",
+                            Patterns::Integer(0),
+                            "Define law for melt viscosity:"
+                            "1 = Schulze et al. 1996, default; 2 = Scaillet et al. 1996.");
         }
         prm.leave_subsection();
       }
@@ -616,6 +593,10 @@ namespace aspect
           melting_time_scale = prm.get_double("Melting time scale for operator splitting");
           alpha_composition = prm.get_double("Exponential compositional viscosity factor");
           max_delta_eta_composition = prm.get_double("Maximum rel compositional viscosity change");
+          melt_viscosity_law = prm.get_integer("Melt viscosity law");
+
+          if (melt_viscosity_law!=1 && melt_viscosity_law!=2)
+            AssertThrow(false, ExcMessage("Unknown melt viscosity law!"));
 
           AssertThrow(stress_exponent > 0, ExcMessage("Stress exponent has to be > 0!"));
 
