@@ -1,24 +1,15 @@
 
 set Additional shared libraries            = ./libmelt_petrol.so, ./libc_heating.so
 
-set Output directory                       = output-melt-petrol-PTplot
+set Output directory                       = output-melt-petrol-PTplot-C050502I10-sca
 set Use years in output instead of seconds = true
-
-#set Resume computation = true
 
 set Dimension                              = 2
 set Adiabatic surface temperature          = 870
 set Surface pressure                       = 0.0
 set CFL number                             = 1.0
 
-# Use an iterative solver scheme.
-# The tolerance and maximum number of iterations can be tuned.
-#set Nonlinear solver scheme                = iterated Advection and Stokes
-#set Nonlinear solver scheme                = single Advection, no Stokes # iterated Advection and Stokes
-#set Nonlinear solver tolerance             = 1e-4
-#set Max nonlinear iterations               = 10
-
-set End time                               = 2.0e4
+set End time                               = 1.0001e4
 set Maximum first time step                = 1e4
 set Maximum time step                      = 1e4 #1e4
 set Maximum relative increase in time step = 10
@@ -46,10 +37,10 @@ end
 subsection Geometry model
   set Model name = box 
   subsection Box 
-    set X extent      = 100e3
-    set Y extent      = 70e3 #50e3
-    set X repetitions = 50
-    set Y repetitions = 25 #250
+    set X extent      = 200e3
+    set X repetitions = 200
+    set Y extent      = 80e3
+    set Y repetitions = 160
   end
 end
 
@@ -64,11 +55,11 @@ end
 # The velocity is zero on sides, free slip at bottom 
 # and zero-traction at top boundary.
 subsection Boundary velocity model
-  set Tangential velocity boundary indicators = bottom, left, right
+  set Tangential velocity boundary indicators = bottom, left, right, top
 end
 
 subsection Boundary traction model
-  set Prescribed traction boundary indicators = top: zero traction
+#  set Prescribed traction boundary indicators = top: zero traction
 end
 
 ##################### Temperature IC and BC ########################
@@ -76,8 +67,8 @@ subsection Initial temperature model
   set Model name = function
   subsection Function
     set Variable names      = x,y
-    set Function constants = xmax=100e3
-    set Function expression = 600.0+(x)/xmax*400.0 + 273.0
+    set Function constants =  xmax=200e3
+    set Function expression = 600.0+x/xmax*400.0 + 273.0
   end
 end
 
@@ -105,8 +96,8 @@ subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      = x,y
-    set Function constants  = c0=1.0, cF0=10.0 #2
-    set Function expression = 0; c0 ; cF0
+    set Function constants  = c0=1.0
+    set Function expression = 0; c0 ; c0
   end
 end
 
@@ -128,36 +119,35 @@ subsection Material model
   subsection Melt petrol
     set Melting time scale for operator splitting = 1e3
     set Reference temperature                     = 273.0
-    set Thermal conductivity                      = 2.5
+    set Thermal conductivity                      = 3.0
     set Reference solid density                   = 2800.0
-    set Reference melt density                    = 2400.0
+    set Reference melt density                    = 2800.0
     set Thermal expansion coefficient             = 0e-5
-    set Composition density change                = 0.0 #200.0
+    set Composition pc density change             = 0.0
+    set Maximum composition pc density change     = 0.0
 
-    set Reference permeability                    = 1e-10
+    set Reference permeability                    = 1e-8
     set Reference melt viscosity                  = 1e4 # overwritten in .cc file
+    set Use constant melt viscosity               = false
+    set Melt viscosity law = 2
 
     set Water in biotite                          = 0.5
-    set Water in muscovite                        = 0.5
+    set Water in muscovite                        = 0.5 # total in muscovite
     set Jump in muscovite                         = 0.2
     set Temperature width of dehydration reaction = 10
 
     set Reference solid composition               = 1.0
     set Reference strainrate                      = 1e-14
     set Stress viscosity exponent                 = 2.4
-    set Reference shear viscosity                 = 2.27e7
+    set Reference shear viscosity                 = 4.51e7 #2.27e7 #4.51e7
     set Activation energy                         = 156000.0
     set Exponential melt weakening factor         = 20.0
-    set Exponential compositional strengthening factor = 4.6
-    set Maximum compositional viscosity change    = 1e4
+    set Exponential compositional viscosity factor = 0.0 #2.3 #4.6 # 2.3 #4.6
+    set Maximum rel compositional viscosity change = 1e2
   end
 end
 
 ##################### Mesh #########################
-# Adaptive mesh refinement with high resolution near the bottom boundary
-# and in regions where porosity > 0.01, c_s > 0.01, c_f <-1.01 (that is peridotiteF > 1.01).
-# This way obtain fine mesh in regions with melt and with composition different
-# from the reference composition.
 subsection Mesh refinement
   set Initial adaptive refinement              = 0
   set Initial global refinement                = 0
@@ -173,6 +163,7 @@ subsection Postprocess
     set Interpolate output = true
     set List of output variables      = material properties, melt material properties
     set Time between graphical output = 1e4
+    set Output format = gnuplot
 
     subsection Material properties
       set List of material properties = density, viscosity
@@ -183,27 +174,4 @@ subsection Postprocess
 
   end
 end
-
-# Checkpoints for restart are written every 100 steps
-subsection Checkpointing
-  set Steps between checkpoint = 20
-end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

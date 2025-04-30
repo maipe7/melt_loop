@@ -1,5 +1,5 @@
 /*
-    Copyright (C) 2023 Petra Maierova
+    Copyright (C) 2025 Petra Maierova
 
     This file is a plugin for ASPECT. It is partly derived from
     Melt global material model of ASPECT.
@@ -35,14 +35,6 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    /*template <int dim>
-    double
-    MeltPetrol<dim>::
-        reference_viscosity() const
-    {
-      return eta_0;
-    }*/
-
     template <int dim>
     double
     MeltPetrol<dim>::
@@ -199,7 +191,7 @@ namespace aspect
         old_peridotiteF[i] = in.composition[i][peridotiteF_idx]; //
         old_porosity[i] = in.composition[i][porosity_idx];
         const double porosity = std::min(1.0, std::max(old_porosity[i], 0.0));
-        // TODO this choice (crop porosity or not) makes an important difference!:
+        // this choice (crop porosity or not) can make an important difference:
         double c_tot_old = old_peridotite[i] * (1.0 - porosity) + old_peridotiteF[i] * porosity;
         // double c_tot_old = old_peridotite[i] * (1.0 - old_porosity[i]) + old_peridotiteF[i] * old_porosity[i];
           
@@ -221,15 +213,16 @@ namespace aspect
                  ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
                             "not filled by the caller."));
           // viscosity reduction due to porosity:
-          // out.viscosities[i] *= std::max(exp(-alpha_phi * porosity), 1e-4); // ref
+          out.viscosities[i] *= std::max(exp(-alpha_phi * porosity), 1e-4); // ref
           // out.viscosities[i] *= exp(-alpha_phi * porosity); // exp
+          /*  // coke // fits Costa/Keller well for 5 orders of magnitude decrease:
           double A = 0.05;
-          double width = 0.26; // coke // fits Costa/Keller well for 5 orders of magnitude decrease
+          double width = 0.26;
           out.viscosities[i] *= exp(-alpha_phi * porosity) * ((porosity > A) ? (porosity < A + width ? (std::exp(-width / (-porosity + A + width)) /
                                             (std::exp(-width / (-porosity + A + width)) + std::exp(-width / (width - (-porosity + A + width)))))
                                          : 0.0)
                                          : 1.0);
-
+          */
           // normalized solid composition:
           const double C_solid_normalized = (C_reference - old_peridotite[i]);
           // const double C_solid_normalized = std::max(-1.0, std::min(1.0, (old_peridotite[i] - C_reference) / dC_solidus_liquidus));
@@ -254,7 +247,6 @@ namespace aspect
           else
             edot_ii = std::max(std::sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))), epsdot_0);
           out.viscosities[i] *= std::pow(edot_ii, ((1.0 - stress_exponent) / stress_exponent));
-          // if (in.position[i][1]<0.25) out.viscosities[i]=1e17; // TEMPORARY - layers
           // total value of shear viscosity is cropped to min and max values
           out.viscosities[i] = std::min(std::max(out.viscosities[i], 1e16), 1e23); // TODO modif 1e16
         }
@@ -320,7 +312,7 @@ namespace aspect
           int PTfield = 0;
           //double lithostatic_pressure = reference_gravity * reference_rho_s * (max_depth - in.position[i][1]); //  (possible modification with depth = this->get_geometry_model().depth(point);) // works only without mesh deformation
           //c_sf(in.temperature[i], lithostatic_pressure, c_s, c_f, PTfield); // use lithostatic pressure - mesh_deformation approximated by max topography (see function update())
-          double dynamic_pressure = in.pressure[i]; // pressure on top set in BCs
+          double dynamic_pressure = std::max(1.0,in.pressure[i]); // pressure on top set in BCs, but always positive
           c_sf(in.temperature[i], dynamic_pressure, c_s, c_f, PTfield); // use dynamic pressure
 
           if (c_f < c_s + 1e-5)
@@ -336,7 +328,6 @@ namespace aspect
               if (reaction_rate_out != nullptr)
               {
                 if (c_tot_old < c_s) //... below solidus - equilibrium porosity is 0
-                //if (c_tot_old < c_s || in.position[i][1]< 0.25 ) //... below solidus - equilibrium porosity is 0 TEMPORARY - layers
                 {
                   if (c == porosity_idx)
                     reaction_rate_out->reaction_rates[i][c] =
@@ -361,7 +352,7 @@ namespace aspect
                 }
 
                 else if (c_tot_old < c_f) // ... between solidus and liquidus
-                {
+                { //std::cout << c_tot_old << " " << c_f << "above solidus \n";
                   const double Dc_s = c_s - old_peridotite[i];
                   const double Dc_f = c_f - old_peridotiteF[i];
                   // porosity update derived from lever rule
@@ -380,6 +371,7 @@ namespace aspect
                 }
                 else // if ( c_tot_old > c_f) // temperature (composition) above liquidus - equilibrium porosity is 1
                 {    // TODO porosity-old_porosity?
+                   //std::cout << c_tot_old << " " << c_f <<  "above liquidus \n";
                   if (c == porosity_idx)
                     reaction_rate_out->reaction_rates[i][c] =
                         (1.0 - old_porosity[i]) / melting_time_scale;
