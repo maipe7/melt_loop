@@ -66,9 +66,9 @@ namespace aspect
     }
 
     inline double fTwetsolid(double pressure)
-    // pressure-dependent wet solidus temperature (Holtz 2001) combined with ???;
+    // pressure-dependent wet solidus temperature (~Holtz 2001) combined with ???;
     // works above 0.1 GPa
-    // pressure in Pa
+    // input pressure in Pa
     {
       const double pressure0 = 1.;
       pressure *= 1e-9;
@@ -81,7 +81,7 @@ namespace aspect
     inline double fTmus(double pressure)
     // muscovite dehydration line according to Thermocalc;
     // experiments put it higher (Patino Douce and Harris, 1998)
-    // pressure in Pa
+    // input pressure in Pa
     {
       return 620.0 + 273. + 130. * pressure * 1e-9;
     }
@@ -99,7 +99,7 @@ namespace aspect
       // wet solidus temperature:
       double Twetsolid = fTwetsolid(pressure);
 
-      // liquidus curve - fit to data in Makhluf et al., 2017 (Johannes, Holtz):
+      // liquidus curve - fit to data in Makhluf et al., 2017 (based on Johannes, Holtz):
       // wliquidus(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
       //const double c = 600. + 273., aG = 19e-9, b = 29., d = 360., eG = 205e-9, f = 0.13;
       const double c = 644. + 273., aG = 7.5*1e-9, b = 8.4, d = 316., eG = 198.0*1e-9, f = 0.41;
@@ -126,8 +126,8 @@ namespace aspect
 
       if (true) // pressure-dependent w1,2,3
       { 
-        //double w1Pvar = 0.0, w2Pvar=0.0, w3Pvar=0.0; // zero
-        double w1Pvar = -0.5, w2Pvar=0.0, w3Pvar=0.4; // pelitic // w1=0.5; w2=1.5; w3=2.0; w1Pvar=-0.5; w2Pvar=0.0; w3Pvar=0.4
+        double w1Pvar = 0.0, w2Pvar=0.0, w3Pvar=0.0; // zero
+        //double w1Pvar = -0.5, w2Pvar=0.0, w3Pvar=0.4; // pelitic // w1=0.5; w2=1.5; w3=2.0; w1Pvar=-0.5; w2Pvar=0.0; w3Pvar=0.4
         //double w1Pvar = -0.2, w2Pvar=0.0, w3Pvar=0.4; // granitic  // w1=0.2; w2=0.6; w3=1.0; w1Pvar=-0.2; w2Pvar=0.0; w3Pvar=0.4 # new
         w1 += w1Pvar * (pressure - pressure0) / pressure0;
         w2 += w2Pvar * (pressure - pressure0) / pressure0;
@@ -170,6 +170,8 @@ namespace aspect
       std::vector<double> old_porosity(in.n_evaluation_points());
       std::vector<double> old_peridotite(in.n_evaluation_points());
       std::vector<double> old_peridotiteF(in.n_evaluation_points());
+      //std::vector<double> old_plastic_strain(in.n_evaluation_points());
+      std::vector<double> old_total_strain(in.n_evaluation_points());
       ReactionRateOutputs<dim> *reaction_rate_out = out.template get_additional_output<ReactionRateOutputs<dim>>();
       MeltOutputs<dim> *melt_out = out.template get_additional_output<MeltOutputs<dim>>();
       if (this->include_melt_transport() && in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && !this->get_parameters().use_operator_splitting)
@@ -184,35 +186,61 @@ namespace aspect
                                                                std::max(this->get_parameters().reaction_steps_per_advection_step, 1U));
         dtt = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
       }
-      //const double reference_depth = 0.0;
-      //const Point<dim> representative_point = this->get_geometry_model().representative_point(reference_depth);
-      //const double reference_gravity = this->get_gravity_model().gravity_vector(representative_point).norm();
+      /*
+      const double reference_depth = 0.0;
+      const Point<dim> representative_point = this->get_geometry_model().representative_point(reference_depth);
+      const double reference_gravity = this->get_gravity_model().gravity_vector(representative_point).norm();
+      */
+
+      const bool is_rigid_present = this->introspection().compositional_name_exists("rigid");
+      const bool is_totalstrain_present = this->introspection().compositional_name_exists("total_strain");
 
       for (unsigned int i = 0; i < in.n_evaluation_points(); ++i)
-      {
+      { // TODO move this outside for loop?
         const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
         const unsigned int peridotite_idx = this->introspection().compositional_index_for_name("peridotite");
         const unsigned int peridotiteF_idx = this->introspection().compositional_index_for_name("peridotiteF");
+        //const unsigned int plastic_strain_idx = this->introspection().compositional_index_for_name("plastic_strain");
+        int total_strain_idx = -1;
+        if (is_totalstrain_present)
+          total_strain_idx = this->introspection().compositional_index_for_name("total_strain");
         old_peridotite[i] = in.composition[i][peridotite_idx];
         old_peridotiteF[i] = in.composition[i][peridotiteF_idx]; //
         old_porosity[i] = in.composition[i][porosity_idx];
-        const double porosity = std::min(1.0, std::max(old_porosity[i], 0.0));
+        //old_plastic_strain[i] = in.composition[i][plastic_strain_idx];
+        if (is_totalstrain_present)
+          old_total_strain[i] = in.composition[i][total_strain_idx];
+        else
+          old_total_strain[i] = 0;
+          const double porosity = std::min(1.0, std::max(old_porosity[i], 0.0));
         // this choice (crop porosity or not) can make an important difference:
         double c_tot_old = old_peridotite[i] * (1.0 - porosity) + old_peridotiteF[i] * porosity;
         // double c_tot_old = old_peridotite[i] * (1.0 - old_porosity[i]) + old_peridotiteF[i] * old_porosity[i];
+          
+        // calculate strain-rate invariant:
+        double edot_ii;
+        const bool use_reference_strainrate = (this->get_timestep_number() == 0) &&
+                                                (in.strain_rate[i].norm() <= std::numeric_limits<double>::min());
+        if (use_reference_strainrate)
+            edot_ii = epsdot_0;
+        else
+            edot_ii = std::max(std::sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))), epsdot_0);
           
         // Calculate density:
         // temperature dependence of density is 1 - alpha * (T - Tref)
         double temperature_dependence = 1.0;
         temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
         // calculate composition dependence of density
+        // TODO figure out correct way to treat it (based on observations/experiments):
         double delta_rho = this->introspection().compositional_name_exists("peridotite")
-                                   ? composition_density_change * (C_reference - c_tot_old) : 0.0;
-                                // ? composition_density_change * (C_reference - old_peridotite[i]) : 0.0;
+                                //   ? composition_density_change * (C_reference - c_tot_old) : 0.0;
+                                 ? composition_density_change * (C_reference - old_peridotite[i]) : 0.0;
         delta_rho = 0.01 * std::max (std::min ( delta_rho, max_composition_density_change), -max_composition_density_change);
         out.densities[i] = reference_rho_s * (1.0 + delta_rho) * temperature_dependence;
         // Calculate viscosity:
         out.viscosities[i] = eta_0;
+        double viscous_viscosity = out.viscosities[i];
+        double vp_viscosity = viscous_viscosity;
         if (in.requests_property(MaterialProperties::viscosity)) // needed, because the strain_rate may not be filled otherwise
         {
           Assert(this->get_timestep_number() <= 1 || std::isfinite(in.strain_rate[i].norm()),
@@ -245,18 +273,39 @@ namespace aspect
           }
           out.viscosities[i] *= visc_temperature_dependence;
           // stress (strain-rate) dependence of viscosity:
-          const bool use_reference_strainrate = (this->get_timestep_number() == 0) &&
-                                                (in.strain_rate[i].norm() <= std::numeric_limits<double>::min());
-          double edot_ii;
-          if (use_reference_strainrate)
-            edot_ii = epsdot_0;
-          else
-            edot_ii = std::max(std::sqrt(std::fabs(second_invariant(deviator(in.strain_rate[i])))), epsdot_0);
           out.viscosities[i] *= std::pow(edot_ii, ((1.0 - stress_exponent) / stress_exponent));
+          // integrate strain-rate invariant to total strain:
+          double e_ii = old_total_strain[i] + edot_ii*this->get_timestep();
+          // strain-dependent weakening of ductile part:
+          //out.viscosities[i] *= std::max(1.0-e_ii/e_ii_max*(1-visc_rel_drop),visc_rel_drop);
+          out.viscosities[i] *= std::pow(10.0,std::max(-e_ii/e_ii_max*visc_rel_drop,-visc_rel_drop));
+          viscous_viscosity = out.viscosities[i];
+          vp_viscosity = viscous_viscosity;
+          if(true && porosity < 1e-3 ) // Drucker-Prager TODO change
+          {
+            //double e_ii = old_plastic_strain[i] + edot_ii*this->get_timestep();
+            double curr_friction_angle = friction_angle*std::max(1.0-e_ii/e_ii_max*(1-angle_rel_drop),angle_rel_drop);
+            const double sin_phi = std::sin(curr_friction_angle);
+            const double cos_phi = std::cos(curr_friction_angle);
+            const double yield_stress = std::min(cohesion * cos_phi + std::max(0.0,in.pressure[i]) * sin_phi,1e12);
+            double current_stress = 2. * viscous_viscosity * edot_ii;
+            if (current_stress >= yield_stress) {
+              vp_viscosity = yield_stress*0.5/edot_ii;
+              //std::cout << " " << yield_stress << " " << current_stress << " " << edot_ii << " " << out.viscosities[i] << "\n";
+            }
+            // eta_eff = min ( eta_eff, yield/2.0/edot_ii ); the same ...
+          }
+          // prescribe maximum viscosity where "rigid" field is present:
+          if (is_rigid_present)
+          {
+            unsigned int rigid_idx = this->introspection().compositional_index_for_name("rigid");
+            double rigid = std::min(std::max(in.composition[i][rigid_idx], 0.0), 1.0);
+            vp_viscosity = vp_viscosity + (1e23-vp_viscosity)*rigid;
+          } 
           // total value of shear viscosity is cropped to min and max values
-          out.viscosities[i] = std::min(std::max(out.viscosities[i], 1e16), 1e23); // TODO modif 1e16
-        }
+          out.viscosities[i] = std::min(std::max(vp_viscosity, 1e16), 1e23); // TODO modif 1e16
 
+        }
         // Fill in melt material properties:
         if (melt_out != nullptr)
         {
@@ -290,7 +339,12 @@ namespace aspect
           }
 
           // Calculate melt density:
+          // TODO find correct way:
           //const double delta_rho = 0.0; compositional dependence of melt density is neglected
+          delta_rho = this->introspection().compositional_name_exists("peridotiteF")
+                                ? composition_density_change * (C_reference - old_peridotiteF[i]) : 0.0;
+          delta_rho = 0.01 * std::max (std::min ( delta_rho, max_composition_density_change), -max_composition_density_change);
+
           double temperature_dependence = 1.0;
           temperature_dependence -= (in.temperature[i] - reference_T) * thermal_expansivity;
           melt_out->fluid_densities[i] = reference_rho_f * (1.0 + delta_rho) * temperature_dependence;
@@ -324,6 +378,13 @@ namespace aspect
           if (c_f < c_s + 1e-5)
             c_f = c_s + 1e-5; // avoid possible division by zero and switch between c_f and c_s
 
+          bool is_rigid = false;
+          if (is_rigid_present)
+          {
+            unsigned int rigid_idx = this->introspection().compositional_index_for_name("rigid");
+            is_rigid = in.composition[i][rigid_idx] > 0.01;
+          } 
+
           // Calculate updates of porosity and compositions.
           // Updates of solid and melt compositions are calculated from mass conservation
           // assuming equal densities of solid and melt.
@@ -333,12 +394,15 @@ namespace aspect
             {
               if (reaction_rate_out != nullptr)
               {
-                if (c_tot_old < c_s) //... below solidus - equilibrium porosity is 0
+                if (c_tot_old < c_s || is_rigid) //... below solidus - equilibrium porosity is 0
                 {
                   if (c == porosity_idx)
                     reaction_rate_out->reaction_rates[i][c] =
                         -old_porosity[i] / melting_time_scale;
-                  else if (c == peridotite_idx)
+                  else if (c == peridotite_idx || c == peridotiteF_idx)
+                    reaction_rate_out->reaction_rates[i][c] =
+                          old_porosity[i] * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
+                 /* else if (c == peridotite_idx)
                     if (PTfield > 0) // || porosity > 1e-3) // TODO rethink usage of PTfield, TODO epsilon
                       reaction_rate_out->reaction_rates[i][c] =
                           porosity * (old_peridotiteF[i] - old_peridotite[i]) / melting_time_scale;
@@ -352,7 +416,7 @@ namespace aspect
                           (c_f - old_peridotiteF[i]) / melting_time_scale; // adjust to liquidus composition // TODO which one is correct? Why??
                     else                                                   // below wet solidus - liquid composition arbitrary, artificially adjusted to liquidus composition
                       reaction_rate_out->reaction_rates[i][c] =
-                          (c_f - old_peridotiteF[i]) / melting_time_scale;
+                          (c_f - old_peridotiteF[i]) / melting_time_scale; */
                   else
                     reaction_rate_out->reaction_rates[i][c] = 0.0;
                 }
@@ -381,7 +445,10 @@ namespace aspect
                   if (c == porosity_idx)
                     reaction_rate_out->reaction_rates[i][c] =
                         (1.0 - old_porosity[i]) / melting_time_scale;
-                  else if (c == peridotite_idx)
+                  else if (c == peridotite_idx || c == peridotiteF_idx)
+                    reaction_rate_out->reaction_rates[i][c] =
+                        (1.0 - old_porosity[i]) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale;
+                  /*else if (c == peridotite_idx)
                     reaction_rate_out->reaction_rates[i][c] =
                         //(c_tot_old - old_peridotite[i]) / melting_time_scale; // ??
                         (1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale; // may produce negative cs if we start out of equilibrium
@@ -389,15 +456,34 @@ namespace aspect
                     reaction_rate_out->reaction_rates[i][c] =
                         //(1.0 - porosity) * (old_peridotite[i] - old_peridotiteF[i]) / melting_time_scale;
                         (c_tot_old - old_peridotiteF[i]) / melting_time_scale; // adjust liquid composition to bulk composition
+                        */
                   else
                     reaction_rate_out->reaction_rates[i][c] = 0.0;
                 }
+                //if (c == plastic_strain_idx)
+                //  reaction_rate_out->reaction_rates[i][c] = edot_ii*(1.0-vp_viscosity/viscous_viscosity); // TODO check division by zero
               }
               out.reaction_terms[i][c] = 0.0;
+              if (c == total_strain_idx) 
+              {
+                out.reaction_terms[i][c] = this->get_timestep()*edot_ii; // TODO better check division by zero
+              }
+              /*if (c == plastic_strain_idx) 
+              {
+                // if porosity>0 relax plastic strain to 0
+                if (old_porosity[i]>0.01)
+                  out.reaction_terms[i][c] = - old_plastic_strain[i]*this->get_timestep()*3e-14*old_porosity[i];  // TODO improve to be time-step independent
+                else
+                  out.reaction_terms[i][c] = this->get_timestep()*edot_ii*(1.0-vp_viscosity/std::max(1.0,viscous_viscosity)); // TODO better check division by zero
+              }*/
             }
           }
         }
 
+        // a hack to account for melt buoyancy even in models without melt migration:
+        if (!this->include_melt_transport()) {
+          out.densities[i] *= 1.0 - porosity*(1.0 - reference_rho_f/reference_rho_s);
+        } 
         out.entropy_derivative_pressure[i] = 0.0;
         out.entropy_derivative_temperature[i] = 0.0;
         out.thermal_expansion_coefficients[i] = thermal_expansivity;
@@ -542,13 +628,32 @@ namespace aspect
           prm.declare_entry("Jump in muscovite", "0.2",
                             Patterns::Double(0.),
                             "How much water is released during muscovite dehydration reaction (in Wt%).");
-          prm.declare_entry("Temperature width of reactions", "10.",
+          prm.declare_entry("Temperature width of reactions", "5.",
                             Patterns::Double(0.),
                             "Width of the temperature interval, over which the abrupt dehydration reaction and wet solidus are smoothed (K).");
           prm.declare_entry("Melt viscosity law", "1",
                             Patterns::Integer(0),
                             "Define law for melt viscosity:"
                             "1 = Schulze et al. 1996, default; 2 = Scaillet et al. 1996.");
+          prm.declare_entry("Angle of internal friction", "10.",
+                            Patterns::Double(0.),
+                            "Angle of internal friction (degrees).");
+                            prm.declare_entry("Cohesion", "1e30",
+                              Patterns::Double(0.),
+                              "Cohesion (Pa).");
+          prm.declare_entry("Maximum strain for weakening", "1.0",
+                            Patterns::Double(0.),
+                              "Maximum strain for weakening of friction angle.");
+          prm.declare_entry("Friction angle relative weakening", "1.0",
+                            Patterns::Double(0.),
+                              "Final relative weakening of friction angle. Default no weakening.");
+          /*prm.declare_entry("Relative ductile weakening", "1.0",
+                            Patterns::Double(0.),
+                               "Final relative weakening of ductile part of viscosity. Default no weakening.");*/
+          prm.declare_entry("Relative log10 ductile weakening", "0.0",
+                                Patterns::Double(0.),
+                                   "Final relative weakening of ductile part of viscosity in logscale. Default no weakening.");
+    
         }
         prm.leave_subsection();
       }
@@ -573,6 +678,11 @@ namespace aspect
           reference_permeability = prm.get_double("Reference permeability");
           activation_energy = prm.get_double("Activation energy");
           stress_exponent = prm.get_double("Stress viscosity exponent");
+          friction_angle = prm.get_double("Angle of internal friction")*constants::degree_to_radians; // degrees -> rad;
+          cohesion = prm.get_double("Cohesion");
+          e_ii_max = prm.get_double("Maximum strain for weakening"); // TODO assert positivity
+          angle_rel_drop = prm.get_double("Friction angle relative weakening"); // TODO assert positivity
+          visc_rel_drop = prm.get_double("Relative log10 ductile weakening"); // TODO assert positivity
           thermal_conductivity = prm.get_double("Thermal conductivity");
           reference_specific_heat = prm.get_double("Reference specific heat");
           thermal_expansivity = prm.get_double("Thermal expansion coefficient");

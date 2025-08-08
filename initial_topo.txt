@@ -1,0 +1,5 @@
+# Test data for ascii data initial topography 
+# POINTS: 2
+# Columns: x Topography[m] 
+0  10239.9
+350e3 10239.9

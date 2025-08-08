@@ -28,6 +28,12 @@
 #include <aspect/postprocess/melt_statistics.h>
 #include <aspect/melt.h>
 
+#include <aspect/material_model/rheology/strain_dependent.h>
+#include <aspect/material_model/rheology/friction_models.h>
+#include <aspect/material_model/rheology/diffusion_creep.h>
+#include <aspect/material_model/rheology/dislocation_creep.h>
+#include <aspect/material_model/rheology/drucker_prager.h>
+
 #include <aspect/mesh_deformation/interface.h>
 
 namespace aspect
@@ -137,6 +143,11 @@ namespace aspect
       double C_reference;
       double max_delta_eta_composition;
       int melt_viscosity_law;
+      double friction_angle;
+      double cohesion;
+      double e_ii_max;
+      double angle_rel_drop;
+      double visc_rel_drop;
 
       double wBt;
       double wMu;

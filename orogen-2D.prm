@@ -1,0 +1,325 @@
+# Input parameter file for ASPECT v2.5 - TODO change for v3.0
+# TODO add finite strain visualization as described here: 
+# https://aspect-documentation.readthedocs.io/en/latest/user/cookbooks/cookbooks/finite_strain/doc/finite_strain.html
+# TODO DEBUG to find why fails with particles and mesh refinement. Bug probably in melt_petrol... total strain?
+# NOTE that density is calculated differently with and without melt transport
+
+set Additional shared libraries = ./libmelt_petrol.so, ./libc_heating.so, ./libcomposition_time_step.so
+
+# if melt is present in the first time step, the model should be run in two phases:
+# first 2e3 years without latent heat to set correct porosity for initial temperature
+# then restart with latent heat
+#set Resume computation = true 
+
+# to test: 
+# xxx
+
+set Dimension                              = 2
+set Output directory                       = outputs/test
+set Use years in output instead of seconds = true
+set Maximum time step                      = 1e5
+set Maximum first time step                = 1e3
+set Maximum relative increase in time step = 20
+#set End time                               = 2e3 # initial phase
+set End time                               = 60e6
+set Nonlinear solver scheme = single Advection, iterated Stokes
+set Nonlinear solver tolerance = 1e-4 # 1e-4
+set Max nonlinear iterations   = 100
+set CFL number = 0.4
+
+subsection Termination criteria
+ set Termination criteria = end time
+ set Checkpoint on termination = true
+end
+
+subsection Checkpointing
+ set Time between checkpoint = 600 # 10 minutes
+end
+
+subsection Time stepping
+  set List of model names = convection time step, composition time step, repeat on cutback
+  subsection Composition time step
+    set Max porosity change = 0.05 # 5%
+  end
+end
+
+subsection Geometry model
+  set Model name = box
+   subsection Box
+     set X extent = 350e3
+     set Y extent = 30e3
+     set X repetitions = 140
+     set Y repetitions = 20
+   end
+end
+
+# Use operator splitting scheme to correctly calculate reaction terms:
+set Use operator splitting                 = true
+subsection Solver parameters
+  subsection Operator splitting parameters
+    set Reaction time step                     = 200
+    set Reaction time steps per advection step = 10
+  end
+ subsection Stokes solver parameters
+ #   set GMRES solver restart length            = 200
+    set Number of cheap Stokes solver steps = 10 # test this
+  end
+end
+
+subsection Melt settings
+  set Include melt transport = false
+  #set Include melt transport = true
+  set Heat advection by melt = false
+  set Melt scaling factor threshold = 1.0
+end
+
+
+subsection Gravity model
+  set Model name = vertical
+  subsection Vertical
+    set Magnitude = 10.0
+  end
+end
+
+subsection Mesh deformation
+  set Mesh deformation boundary indicators = \
+  top:boundary function, top:free surface, top:ascii data, top:diffusion
+  set Additional tangential mesh velocity boundary indicators = left #, right
+
+  subsection Free surface
+    set Free surface stabilization theta = 0.5
+    set Surface velocity projection = vertical # vertical | normal
+  end
+  subsection Diffusion
+    set Hillslope transport coefficient = 1e-7
+  end
+  subsection Boundary function
+    set Function constants = scale=3.17e-8, \ 
+      verosion=0.00007, maxdepth=30e3
+    set Function expression = \
+      0; -verosion*scale*(y>maxdepth+5e3 ? y-(maxdepth+5e3):0)*1e-3
+  end
+  subsection Ascii data model
+    set Data directory = ./
+    set Data file name = initial_topo.txt
+  end
+end
+set Pressure normalization = no
+
+# explicitly prescribe velocity and pressure
+subsection Boundary velocity model
+  set Prescribed velocity boundary indicators = left x:function #, right x:function
+  set Tangential velocity boundary indicators = bottom, right
+  subsection Function # reasonable values - verosion<0.001, vtecto <~0.001m/yr; Cdepth should be corrected - this is just upper estimate of crustal thickness
+    #set Function constants = vtecto1=0.001, Cdepth=30e3, xlen=500e3, ttecto1=30e6
+    #set Function expression = \
+    #  t<ttecto1 ? -(x-xlen)/Cdepth*vtecto1 : 0.0 ; \      
+    #  0.0
+
+  # In 2D, with a moving rigid side, we keep constant thickening and strainrate by decreasing velocity:
+  # vx=vx0*exp(-t/t0)
+  # W(t)=W0-Int_0^t vx tau dtau
+  # W(t->infty)=0 => W0=vx0*t0
+  # W(t)=W0*exp(-t/t0)
+  # for vy=1mm/yr: vy=vx*H/W=vx0*H/W0 = e.g. 1cmyr * 30km / 300km; t0=W0/vx0=30Myr
+  # for vy=2mm/yr: vy=vx*H/W=vx0*H/W0 = e.g. 2cmyr * 30km / 300km; t0=W0/vx0=15Myr
+    set Function constants = vx0=0.01, W0=300e3, t0=30e6
+    set Function expression = \
+      t<t0 ? vx0*exp(-t/t0) : 0.0 ; \      
+      0.0    
+  end
+end
+
+# initial temperature may be set various ways:
+subsection Initial temperature model
+  set List of model names = ascii data
+  subsection Ascii data model
+    set Data directory = ./
+    set Data file name = ./initial_temperature.txt
+  end
+end
+
+# fixed boundary temperature:
+subsection Boundary temperature model
+  set Fixed temperature boundary indicators = top #, bottom
+  set List of model names =  function
+  subsection Function
+    set Function expression = (y>1 ? 273 : 844.87)
+  end
+end
+
+# or boundary heat flux - check resolution dependency!:
+ subsection Boundary heat flux model
+  set Fixed heat flux boundary indicators = bottom
+  set Model name = function
+  subsection Function
+    # parametrized initial delamination of mantle, then 
+    # 1. decrease due to cooling and thickening and
+    # 2. increase due to erosion
+    set Function constants = ttecto1=30e6, tconst=40e6, tend=60e6, qmax=25e-3, qmin=5e-3 # warm
+    #set Function constants = ttecto1=30e6, tconst=40e6, tend=60e6, qmax=5e-3, qmin=5e-3 # cold
+    #set Function expression = (t<31e6 ? -20e-3 : -1400*600/sqrt((t-30e6)*3e7) ) #  k*(Tbot-Ttop)/sqrt(kappa*pi*time)*exp(-(depth/2./sqrt(kappa*time))**2)
+    set Function expression = (t<ttecto1 ? -qmax+( qmax-qmin)*t/ttecto1 : (t<tconst ? -qmin : \
+                                           -qmin+(-qmax+qmin)*(t-tconst)/(tend-tconst)))
+    #set Function expression = -20e-3
+  end
+ end
+
+subsection Heating model
+  set List of model names =  composition melt heating, latent heat melt
+  #set List of model names =  composition melt heating # initial phase without latent heat
+  subsection Latent heat melt
+    set Melting entropy change = -300.0 # J/kg/K
+  end
+  subsection Composition melt heating
+    set Reference composition = 1.0
+    set Heat production for reference composition = 1.6e-6 # W/m3, valid for cref
+  end
+end
+
+subsection Compositional fields
+  set Number of fields                        = 5
+  set Names of fields                         = porosity, peridotite, peridotiteF, total_strain, rigid
+  set Compositional field methods             = field, field, field, field, field
+  #set Compositional field methods             = field, field, melt field, field, field
+end
+
+subsection Initial composition model
+  set List of model names = function
+  subsection Function
+    set Variable names      = x,y
+    set Function constants  = xsize=350e3, cbot=0.0, cmid=0.5, ctop=1.0, cred=0.0, svar=0.1, ymid=0e3, \
+      x0=10e3, x1=50e3, x2=100e3
+    set Function expression = 0.0; \
+      (cred+(x>x1 ? (1-cred)*(x<x2? (x-x1)/(x2-x1) : 1): 0))*( y < 3e3 ? cbot : (y<ymid ? cmid : ctop)) \
+       + 0*(x>240e3 && x < 280e3 ? (y>3e3 && y < 20e3 ? 0.3 : 0) : 0) + 1*(y>20e3 && y < 22e3 ? - 0.1 : 0); \
+      1.0; \
+      (x>x1 ? rand()*svar : 0) \
+       + 1*(x>250e3 && x < 270e3 ? 0.1 : 0); \
+      (x>x0 ? (x<x1? 1-(x-x0)/(x1-x0) : 0): 1)
+  end
+end
+
+subsection Boundary composition model
+  set Fixed composition boundary indicators    = left #top, bottom, left, right
+  set List of model names                      = initial composition
+end
+
+subsection Boundary fluid pressure model
+  set Plugin name =  density
+  subsection Density
+    set Density formulation =  fluid density # fluid density = same velocity as solid
+  end
+end
+
+subsection Material model
+  set Model name = melt petrol
+  subsection Melt petrol
+    set Melting time scale for operator splitting = 1e3
+    set Reference temperature                     = 273.0
+    set Thermal conductivity                      = 2.5
+    set Reference solid density                   = 2800.0
+    set Reference melt density                    = 2400.0 # 2500.0
+    set Thermal expansion coefficient             = 3e-5
+    set Composition pc density change             = 0.0 # 1 # use melt_PTplot.prm to find out good values
+    set Maximum composition pc density change     = 10.0
+
+    set Reference permeability                    = 1e-8
+    set Reference melt viscosity                  = 1e4 # overwritten in .cc file
+    set Use constant melt viscosity               = true #false
+
+    set Water in biotite                          = 0.5
+    set Water in muscovite                        = 0.8 # total in muscovite
+    set Jump in muscovite                         = 0.4
+
+    set Reference solid composition               = 1.0
+    set Reference strainrate                      = 1e-20
+    set Stress viscosity exponent                 = 2.4
+    set Reference shear viscosity                 = 4.51e7 #4.51e7
+    set Activation energy                         = 156000.0
+    set Exponential melt weakening factor         = 25.0
+    set Exponential compositional viscosity factor = 2.0 #4.0 # 2.3  # use melt_PTplot.prm to find out good values
+    set Maximum rel compositional viscosity change = 1e3
+    set Cohesion = 5e7
+    set Angle of internal friction = 10.0
+    set Maximum strain for weakening = 1.0
+    set Friction angle relative weakening = 0.5
+    set Relative log10 ductile weakening = 0.5
+  end
+
+end
+
+subsection Mesh refinement
+  set Initial global refinement                = 0
+  set Initial adaptive refinement              = 2
+  set Minimum refinement level                 = 0
+  set Time steps between mesh refinement       = 1
+  #set Adapt by fraction of cells = true
+  set Strategy                                 = strain rate, boundary,  composition gradient, composition threshold
+  set Normalize individual refinement criteria = true
+  set Refinement criteria merge operation      = max
+  #set Refinement criteria scaling factors      = 0.3, 0.5, 1, 1
+  subsection Boundary
+    set Boundary refinement indicators = top
+  end
+  subsection Composition gradient
+   set Compositional field scaling factors = 1, 1, 0, 0, 0
+  end
+  subsection Composition threshold
+   set Compositional field thresholds = 0.01, 100, 100, 100.0, 100.0
+  end
+  subsection Maximum refinement function
+   # set Coordinate system = cartesian
+   # set Variable names = x,y
+   # set Function expression = ( x< 100e3 ? 4 : 10)
+  end
+end
+
+# subsection Particles
+#     set Allow cells without particles = true
+#     set List of particle properties =  pT path
+#     set Particle generator name =  ascii file
+#     subsection Generator
+#       subsection Ascii file
+#         set Data directory = ./
+#         set Data file name = particle-positions-25km.dat
+#       end
+#     end
+# end
+
+subsection Postprocess
+  set List of postprocessors = temperature statistics, velocity statistics, \
+    depth average, visualization, topography #, particles
+  subsection Visualization
+    set List of output variables = material properties, vertical heat flux, heating, \
+      strain rate, heat flux map, error indicator #, melt material properties
+    set Time between graphical output = 1e5
+    set Time steps between graphical output = 10
+    set Output mesh velocity = true
+  end
+  subsection Depth average # write a new plugin to output it on deformed mesh
+    set List of output variables = temperature
+    set Number of zones = 35
+    set Output format = txt
+    set Time between graphical output = 1e6
+  end
+  subsection Particles
+    set Data output format = ascii
+    set Time between data output = 1e6
+     set Allow cells without particles = true
+     set List of particle properties =  pT path
+     set Particle generator name =  ascii file
+     subsection Generator
+       subsection Ascii file
+         set Data directory = ./
+         set Data file name = particle-positions-2D.dat
+       end
+     end
+
+  end
+  subsection Topography
+    set Output to file = true
+    set Time between text output = 1e6
+  end
+
+end
