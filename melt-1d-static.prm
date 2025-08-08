@@ -15,7 +15,8 @@ subsection Time stepping
 end
 
 set Dimension                              = 2
-set Output directory                       = outputs/melt-1d-P15GPa-T790a200-C050502I08-k8-eta1e12a20ref-Sch
+set Output directory                       = outputs/melt-1d-P05GPa-T650a070--C051510I20P-k8-eta1e12a20ref-Sch-dtm1e3dtr1e1
+
 set Use years in output instead of seconds = true
 set Maximum time step                      = 1e5
 #set Maximum time step                      = 1e4
@@ -25,13 +26,13 @@ set End time                               = 10e6
 set Nonlinear solver scheme = single Advection, iterated Stokes
 
 set Pressure normalization = surface # default
-set Surface pressure = 1.5e9 # (Pa)
+set Surface pressure = 0.5e9 # (Pa)
 
 # Use operator splitting scheme to calculate reaction terms:
 set Use operator splitting                 = true
 subsection Solver parameters
   subsection Operator splitting parameters
-    set Reaction time step                     = 200
+    set Reaction time step                     = 1e1 #200
     set Reaction time steps per advection step = 10
   end
  subsection Stokes solver parameters
@@ -41,9 +42,9 @@ subsection Solver parameters
 end
 
 subsection Melt settings
-  set Include melt transport = true #false
+  set Include melt transport = true
   set Heat advection by melt = true
-  set Melt scaling factor threshold = 1.0 ##100000.0
+  set Melt scaling factor threshold =1 #00000.0
 end
 
 subsection Formulation
@@ -82,15 +83,9 @@ subsection Boundary velocity model
 end
 
 subsection Initial temperature model
-# 1.5GPa, c0=0.8 - solidus ~X K = 790 C
-# 1.0GPa, c0=0.8 - solidus ~1002 K = 729 C
-# 0.5GPa, c0=0.8 - solidus ~ 673 C
-# 0.25GPa, c0=0.8 - solidus ~ 960 K = 687 C
-# 1.0GPa, c0=1.0 (saturated) - wet solidus 649 C
-# always set temperature ~ 20 K lower to have upper boundary safely below solidus
   set List of model names = function
   subsection Function
-    set Function expression = 273 + 790 - 20
+    set Function expression = 273 + 650
   end
 end
 
@@ -98,8 +93,8 @@ subsection Boundary temperature model
   set Fixed temperature boundary indicators = top, bottom
   set List of model names =  function
   subsection Function
-    set Function constants = T0=790, Tinc=200
-    set Function expression = 273 - 20 + T0 + Tinc*(10e3-y)/10e3
+    set Function constants = T0=650, Tinc=70
+    set Function expression = 273 + T0 + Tinc*(10e3-y)/10e3
   end
 end
 
@@ -128,7 +123,7 @@ subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      = x,y
-    set Function constants  = yLCt=1e3, twidth=0.5e3, c0=0.8
+    set Function constants  = yLCt=1e3, twidth=0.5e3, c0=2.0
     set Function expression = 0; \
      ((y<yLCt) ? (y>yLCt-twidth ?  c0*( exp(-twidth/(y-yLCt+twidth))/ ( exp(-twidth/(y-yLCt+twidth)) + exp(-twidth/(twidth - (y-yLCt+twidth))))   ) : 0.0 ) : c0) ; \
      ((y<yLCt) ? (y>yLCt-twidth ?  c0*( exp(-twidth/(y-yLCt+twidth))/ ( exp(-twidth/(y-yLCt+twidth)) + exp(-twidth/(twidth - (y-yLCt+twidth))))   ) : 0.0 ) : c0)
@@ -169,17 +164,17 @@ subsection Material model
     set Melt viscosity law                        = 1 # 1=Schulze, 2=Scaillet
 
     set Water in biotite                          = 0.5
-    set Water in muscovite                        = 0.5 # total in muscovite
-    set Jump in muscovite                         = 0.2
-    set Temperature width of dehydration reaction = 10
-    set Reference solid composition               = 0.8 # used in density and viscosity computation
+    set Water in muscovite                        = 1.5 # total in muscovite
+    set Jump in muscovite                         = 1.0
+    set Temperature width of reactions            = 5
+    set Reference solid composition               = 2.0 # used in density and viscosity computation
 
     set Reference strainrate                      = 1e-14
-    set Stress viscosity exponent                 = 1.0 #2.4
-    set Reference shear viscosity                 = 1e12 #4.51e7 #1e15 #2.27e7 #4.51e7
+    set Stress viscosity exponent                 = 1.0
+    set Reference shear viscosity                 = 1e12
     set Activation energy                         = 150000.0
-    set Exponential melt weakening factor         = 20.0 #20.0
-    set Exponential compositional viscosity factor = 0.0 # 2.3 #4.6
+    set Exponential melt weakening factor         = 20.0
+    set Exponential compositional viscosity factor = 0.0
     set Maximum rel compositional viscosity change = 1e2
   end
 end

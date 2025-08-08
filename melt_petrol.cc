@@ -70,7 +70,12 @@ namespace aspect
     // works above 0.1 GPa
     // pressure in Pa
     {
-      return (pressure < 1e9 ? 640. + 273. + 150. * std::pow(pressure * 1e-9 - 1., 4.) / 1. : 640. + 273. + 50. * std::pow(pressure * 1e-9 - 1., 2.) / 1.);
+      const double pressure0 = 1.;
+      pressure *= 1e-9;
+      const double minwetsolid = 650. + 273.; 
+      return (pressure < pressure0 ? 
+        minwetsolid + 150. * std::pow(pressure - pressure0, 4.) / pressure0 : 
+        minwetsolid +  50. * std::pow(pressure - pressure0, 2.) / pressure0);
     }
 
     inline double fTmus(double pressure)
@@ -96,42 +101,43 @@ namespace aspect
 
       // liquidus curve - fit to data in Makhluf et al., 2017 (Johannes, Holtz):
       // wliquidus(P,T)= (a*P+b)*(1-((T-c)/(d+e*P))**f) //P..GPa,T..C
-      const double c = 600. + 273.;
-      const double aG = 19e-9;
-      const double b = 29.;
-      const double d = 360.;
-      const double eG = 205e-9;
-      const double f = 0.13;
+      //const double c = 600. + 273., aG = 19e-9, b = 29., d = 360., eG = 205e-9, f = 0.13;
+      const double c = 644. + 273., aG = 7.5*1e-9, b = 8.4, d = 316., eG = 198.0*1e-9, f = 0.41;
       double wliquidus = (aG * pressure + b) * (1 - std::pow((std::max(Twetsolid, temperature) - c) / (d + eG * pressure), f));
       // solidus temperature for c=0; dry solidus==dry liquidus - curves cross there:
       double Tdrysolid = c + d + eG * pressure;
       // liquid composition at temperature = wet solidus - DT; curves cross there:
+      // TODO assert (Twetsolid - DT - c) > 0:
+      AssertThrow(Twetsolid - DT - c > 0, ExcMessage("(Minimum wet solidus - Temperature width of dehydration reaction has to be > C in liquidus definition!"));
       double wmax = (aG * pressure + b) * (1 - std::pow((Twetsolid - DT - c) / (d + eG * pressure), f));
 
       // Construction of the solidus composition, a piecewise-linear function of temperature
+      double T0 = Tdrysolid;
+      double T1 = Tmus;
+      double T2 = Tmus - DT;
+      double T3 = Twetsolid;
+      double T4 = Twetsolid - DT;
+      double w0 = 0;
+      double w1 = wBt;
+      double w2 = wBt + wMu0;
+      double w3 = wBt + wMu0 + wMu1;
+      double w4 = wmax;
       double wlin1, wlin2, wlin3, wlin4;
-      if (true) // fixed wBt, wMu0, wMu1 points for all pressures
-      {          // todo clean and check
-        wlin1 = wBt * (temperature - Tdrysolid) / (Tmus - Tdrysolid);
-        wlin2 = wBt + wMu0 * (Tmus - temperature) / DT;
-        wlin3 = wBt + wMu0 + wMu1 * (temperature - Tmus) / (Twetsolid - Tmus);
-        wlin4 = wBt + wMu0 + wMu1 + (wmax - (wBt + wMu0 + wMu1)) * ((Twetsolid - temperature) / DT);
+
+      if (true) // pressure-dependent w1,2,3
+      { 
+        //double w1Pvar = 0.0, w2Pvar=0.0, w3Pvar=0.0; // zero
+        double w1Pvar = -0.5, w2Pvar=0.0, w3Pvar=0.4; // pelitic // w1=0.5; w2=1.5; w3=2.0; w1Pvar=-0.5; w2Pvar=0.0; w3Pvar=0.4
+        //double w1Pvar = -0.2, w2Pvar=0.0, w3Pvar=0.4; // granitic  // w1=0.2; w2=0.6; w3=1.0; w1Pvar=-0.2; w2Pvar=0.0; w3Pvar=0.4 # new
+        w1 += w1Pvar * (pressure - pressure0) / pressure0;
+        w2 += w2Pvar * (pressure - pressure0) / pressure0;
+        w3 += w3Pvar * (pressure - pressure0) / pressure0;
       }
-      else // more detailed construction with pressure dependent biotite content and other features:
-      {
-        // 1. linear between c=0 and c=wlin0Tmus:
-        double Tmus0 = fTmus(pressure0); // temperature of muscovite dehydration reaction at reference pressure
-        wlin1 = wBt * (temperature - Tdrysolid) / (Tmus0 - Tdrysolid);     // crossing same reference point - preferred
-        //  2. linear between c=wlin1Tmus and c=wlin1Tmus+wMu0:
-        double wlin1Tmus = wBt * (Tmus - Tdrysolid) / (Tmus0 - Tdrysolid); // endpoint of the first linear part
-        wlin2 = wlin1Tmus + wMu0 * (Tmus - temperature) / DT;
-        // 3. linear between c=wlin1Tmus+wMu0 and c=wlin2Twetsolid:
-        double TwetsolidP0 = fTwetsolid(pressure0); // wet solidus temperature at reference pressure:
-        wlin3 = (wlin1Tmus + wMu0) + (wMu1) * (temperature - Tmus) / (TwetsolidP0 - Tmus0);               // fixed wMu0 (jump in muscovite), fixed slope - preferred
-        //  4. linear between wlin3Twetsolid and wmax:
-        double wlin3Twetsolid = (wlin1Tmus + wMu0) + (wMu1) * (Twetsolid - Tmus) / (TwetsolidP0 - Tmus0); // endpoint of the third linear part
-        wlin4 = wlin3Twetsolid + (wmax - wlin3Twetsolid) * ((Twetsolid - temperature) / DT);
-      }
+      wlin1 = w0 + (w1 - w0) * (temperature - T0) / (T1 - T0);
+      wlin2 = w1 + (w2 - w1) * (temperature - T1) / (T2 - T1);
+      wlin3 = w2 + (w3 - w2) * (temperature - T2) / (T3 - T2);
+      wlin4 = w3 + (w4 - w3) * (temperature - T3) / (T4 - T3);
+//cout << pressure << " " << temperature << " " << (Twetsolid - DT - c) << " " << (d + eG * pressure) << " " << w4 << " \n";
       double wsolidus =
           (temperature > Twetsolid - DT ? (temperature > Twetsolid ? (temperature > Tmus - DT ? (temperature > Tmus ? wlin1 : wlin2) : wlin3) : wlin4)
                                         : wliquidus);
@@ -178,9 +184,9 @@ namespace aspect
                                                                std::max(this->get_parameters().reaction_steps_per_advection_step, 1U));
         dtt = this->get_timestep() / static_cast<double>(number_of_reaction_steps);
       }
-      const double reference_depth = 0.0;
-      const Point<dim> representative_point = this->get_geometry_model().representative_point(reference_depth);
-      const double reference_gravity = this->get_gravity_model().gravity_vector(representative_point).norm();
+      //const double reference_depth = 0.0;
+      //const Point<dim> representative_point = this->get_geometry_model().representative_point(reference_depth);
+      //const double reference_gravity = this->get_gravity_model().gravity_vector(representative_point).norm();
 
       for (unsigned int i = 0; i < in.n_evaluation_points(); ++i)
       {
@@ -536,9 +542,9 @@ namespace aspect
           prm.declare_entry("Jump in muscovite", "0.2",
                             Patterns::Double(0.),
                             "How much water is released during muscovite dehydration reaction (in Wt%).");
-          prm.declare_entry("Temperature width of dehydration reaction", "10.",
+          prm.declare_entry("Temperature width of reactions", "10.",
                             Patterns::Double(0.),
-                            "Width of the temperature interval, over which the abrupt dehydration reaction is smoothed (K).");
+                            "Width of the temperature interval, over which the abrupt dehydration reaction and wet solidus are smoothed (K).");
           prm.declare_entry("Melt viscosity law", "1",
                             Patterns::Integer(0),
                             "Define law for melt viscosity:"
@@ -578,7 +584,7 @@ namespace aspect
           wMu = prm.get_double("Water in muscovite");
           wMu0 = prm.get_double("Jump in muscovite");
           wMu1 = wMu - wMu0;
-          DT = prm.get_double("Temperature width of dehydration reaction");
+          DT = prm.get_double("Temperature width of reactions");
 
           C_reference = prm.get_double("Reference solid composition");
           include_melting_and_freezing = prm.get_bool("Include melting and freezing");

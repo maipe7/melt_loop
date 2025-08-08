@@ -1,7 +1,7 @@
 # cmake -DAspect_DIR=/opt/aspect/src/build .; make
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 
-FIND_PACKAGE(Aspect 2.4.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
+FIND_PACKAGE(Aspect 2.5.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
 
 IF (NOT Aspect_FOUND)
   MESSAGE(FATAL_ERROR "\n"
@@ -16,14 +16,22 @@ PROJECT(${TARGET})
 ADD_LIBRARY(${TARGET} SHARED melt_petrol.cc)
 ASPECT_SETUP_PLUGIN(${TARGET})
 
-
 SET(TARGET "c_heating")
 PROJECT(${TARGET})
 ADD_LIBRARY(${TARGET} SHARED c_heating.cc)
 ASPECT_SETUP_PLUGIN(${TARGET})
 
-
 SET(TARGET "initial_composition")
 PROJECT(${TARGET})
 ADD_LIBRARY(${TARGET} SHARED initial_composition.cc)
+ASPECT_SETUP_PLUGIN(${TARGET})
+
+SET(TARGET "composition_time_step")
+PROJECT(${TARGET})
+ADD_LIBRARY(${TARGET} SHARED composition_time_step.cc)
+ASPECT_SETUP_PLUGIN(${TARGET})
+
+SET(TARGET "depth_average_melt")
+PROJECT(${TARGET})
+ADD_LIBRARY(${TARGET} SHARED depth_average_melt.cc)
 ASPECT_SETUP_PLUGIN(${TARGET})
