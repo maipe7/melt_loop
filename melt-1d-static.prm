@@ -15,7 +15,7 @@ subsection Time stepping
 end
 
 set Dimension                              = 2
-set Output directory                       = outputs/melt-1d-P05GPa-T650a070--C051510I20P-k8-eta1e12a20ref-Sch-dtm1e3dtr1e1
+set Output directory                       = outputs/test1 #melt-1d-P05GPa-T650a070--C051510I20P-k8-eta1e12a20ref-Sch-dtm1e3dtr1e1
 
 set Use years in output instead of seconds = true
 set Maximum time step                      = 1e5

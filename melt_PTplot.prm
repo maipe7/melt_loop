@@ -1,7 +1,8 @@
 
 set Additional shared libraries            = ./libmelt_petrol.so, ./libc_heating.so
 
-set Output directory                       = output-melt-petrol-PTplot-C050502I10-sca
+set Output directory                       = output-melt-petrol-PTplot-C052010I20
+
 set Use years in output instead of seconds = true
 
 set Dimension                              = 2
@@ -96,7 +97,7 @@ subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      = x,y
-    set Function constants  = c0=1.0
+    set Function constants  = c0 = 0.4 # 2.0
     set Function expression = 0; c0 ; c0
   end
 end
@@ -131,18 +132,18 @@ subsection Material model
     set Use constant melt viscosity               = false
     set Melt viscosity law = 2
 
-    set Water in biotite                          = 0.5
-    set Water in muscovite                        = 0.5 # total in muscovite
-    set Jump in muscovite                         = 0.2
-    set Temperature width of dehydration reaction = 10
+    set Water in biotite                          = 0.2 #0.5
+    set Water in muscovite                        = 0.8 #1.5 # total in muscovite
+    set Jump in muscovite                         = 0.4 #1.0
+    set Temperature width of reactions            = 5
 
-    set Reference solid composition               = 1.0
+    set Reference solid composition               = 0.4 #2.0
     set Reference strainrate                      = 1e-14
     set Stress viscosity exponent                 = 2.4
     set Reference shear viscosity                 = 4.51e7 #2.27e7 #4.51e7
     set Activation energy                         = 156000.0
     set Exponential melt weakening factor         = 20.0
-    set Exponential compositional viscosity factor = 0.0 #2.3 #4.6 # 2.3 #4.6
+    set Exponential compositional viscosity factor = 0.0
     set Maximum rel compositional viscosity change = 1e2
   end
 end
